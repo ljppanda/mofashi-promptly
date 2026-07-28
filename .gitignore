@@ -1,0 +1,39 @@
+# ============ 密钥 / 环境（绝不提交） ============
+# 真实管理员口令 + LangSmith Key 都在这里，泄露即安全事故
+site/server/.env
+*.env
+.env
+.env.local
+
+# 会话令牌 HMAC 签名密钥（服务端自动生成，缺失会自动重建）
+site/server/data/.app_secret
+
+# ============ 依赖 ============
+node_modules/
+site/node_modules/
+site/server/node_modules/
+
+# ============ 构建产物（由 npm run build 生成） ============
+site/dist/
+dist/
+
+# ============ 运行时数据 / 数据库 ============
+# ⚠️ templates.json 是源码语料种子，需保留；下面只排除运行时产物
+site/server/data/app.db
+site/server/data/app.db-wal
+site/server/data/app.db-shm
+site/server/data/lancedb/
+
+# ============ 日志 ============
+*.log
+logs/
+
+# ============ 工具记忆（非源码） ============
+.workbuddy/
+
+# ============ 系统 / 编辑器 ============
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

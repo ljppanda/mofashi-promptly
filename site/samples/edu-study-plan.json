@@ -1,0 +1,46 @@
+{
+  "title": "学习计划",
+  "industry": "教育培训",
+  "task": "学习规划",
+  "summary": "按目标与基础拆阶段、定资源与自测",
+  "tags": [
+    "学习计划",
+    "规划",
+    "自学"
+  ],
+  "variables": [
+    {
+      "name": "subject",
+      "label": "学科/技能",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：机器学习"
+    },
+    {
+      "name": "goal",
+      "label": "学习目标",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "学完能做什么"
+    },
+    {
+      "name": "weeks",
+      "label": "周期",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：12 周"
+    },
+    {
+      "name": "level",
+      "label": "基础",
+      "type": "select",
+      "options": [
+        "零基础",
+        "入门",
+        "进阶"
+      ],
+      "required": true
+    }
+  ],
+  "prompt": "你是学习规划师，帮定{{subject}}学习计划。目标：{{goal}}；周期：{{weeks}}；基础：{{level}}。\n\n输出：阶段划分（每阶段目标+资源+产出）+ 周节奏 + 自测方式 + 常见放弃点对策。可落地、有里程碑。"
+}

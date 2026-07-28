@@ -1,0 +1,48 @@
+{
+  "title": "技术文档/README",
+  "industry": "编程开发",
+  "task": "文档写作",
+  "summary": "清晰可复制、新人不懵的项目文档",
+  "tags": [
+    "README",
+    "文档",
+    "开源"
+  ],
+  "variables": [
+    {
+      "name": "language",
+      "label": "语言",
+      "type": "select",
+      "options": [
+        "Python",
+        "Go",
+        "TypeScript",
+        "Java",
+        "Rust",
+        "其他"
+      ],
+      "required": true
+    },
+    {
+      "name": "repo",
+      "label": "项目说明",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "项目是做什么的"
+    },
+    {
+      "name": "sections",
+      "label": "章节",
+      "type": "multiselect",
+      "options": [
+        "安装",
+        "用法",
+        "API",
+        "贡献",
+        "许可"
+      ],
+      "required": true
+    }
+  ],
+  "prompt": "你是技术写手，写项目 README（{{language}}）。项目：{{repo}}；需含：{{sections}}。\n\n输出：项目简介、特性、快速开始（安装/最小示例）、API/配置要点、贡献指南、许可与致谢。清晰、可复制、新人不懵。"
+}

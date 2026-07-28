@@ -1,0 +1,54 @@
+{
+  "title": "旅行攻略",
+  "industry": "生活/个人效率",
+  "task": "行程规划",
+  "summary": "松弛有重点的每日行程与避坑",
+  "tags": [
+    "旅行",
+    "攻略",
+    "规划"
+  ],
+  "variables": [
+    {
+      "name": "dest",
+      "label": "目的地",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：京都"
+    },
+    {
+      "name": "days",
+      "label": "天数",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：5 天"
+    },
+    {
+      "name": "budget",
+      "label": "预算",
+      "type": "text",
+      "required": false,
+      "placeholder": "如：8000"
+    },
+    {
+      "name": "style",
+      "label": "风格",
+      "type": "select",
+      "options": [
+        "穷游",
+        "舒适",
+        "深度",
+        "亲子"
+      ],
+      "required": true
+    },
+    {
+      "name": "prefer",
+      "label": "偏好",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "如：爱吃、不爱赶"
+    }
+  ],
+  "prompt": "你是旅行规划师，做{{dest}}{{days}}天攻略，预算{{budget}}，风格{{style}}。偏好：{{prefer}}。\n\n输出：每日行程（景点/交通/用餐/时长）、必吃必玩、避坑、预算拆分、行李清单。松弛有重点。"
+}

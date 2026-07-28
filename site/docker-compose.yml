@@ -1,0 +1,27 @@
+services:
+  ppt-agent:
+    build: .
+    image: ppt-agent:local
+    container_name: ppt-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - NODE_ENV=production
+      # 可选：在此覆盖/补充密钥（也可直接写在 ./server/.env 里）
+      # - APP_ADMIN_PASSPHRASE=你的管理员口令
+      # - LANGSMITH_API_KEY=lsv2_xxx
+    env_file:
+      - ./server/.env
+    volumes:
+      - appdata:/app/server/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  appdata:

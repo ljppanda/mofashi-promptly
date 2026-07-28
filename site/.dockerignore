@@ -1,0 +1,12 @@
+server/node_modules
+node_modules
+.git
+*.log
+.env
+.app_secret
+samples
+gen_samples.js
+server.js
+dist
+server/data/*.db
+server/data/lancedb

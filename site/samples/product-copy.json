@@ -1,0 +1,50 @@
+{
+  "title": "商品文案",
+  "industry": "电商运营",
+  "task": "商品文案",
+  "summary": "写具备转化力的商品卖点文案",
+  "tags": [
+    "文案",
+    "转化"
+  ],
+  "variables": [
+    {
+      "name": "product",
+      "label": "商品",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：便携咖啡机"
+    },
+    {
+      "name": "platform",
+      "label": "平台",
+      "type": "select",
+      "options": [
+        "淘宝",
+        "抖音",
+        "小红书",
+        "独立站"
+      ],
+      "required": true
+    },
+    {
+      "name": "selling_point",
+      "label": "核心卖点",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "列出 2-3 个卖点"
+    },
+    {
+      "name": "tone",
+      "label": "风格",
+      "type": "select",
+      "options": [
+        "种草",
+        "专业",
+        "促销"
+      ],
+      "required": false
+    }
+  ],
+  "prompt": "为{{platform}}上的《{{product}}》写一篇{{tone}}风格商品文案，围绕卖点 {{selling_point}}。\n结构：抓眼标题 + 痛点引入 + 卖点展开 + 信任背书 + 行动号召。避免夸大与违禁词。"
+}

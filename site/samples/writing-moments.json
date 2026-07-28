@@ -1,0 +1,46 @@
+{
+  "title": "朋友圈文案",
+  "industry": "写作创作",
+  "task": "社交文案",
+  "summary": "不同场景与语气的朋友圈短文案",
+  "tags": [
+    "朋友圈",
+    "文案",
+    "社交"
+  ],
+  "variables": [
+    {
+      "name": "occasion",
+      "label": "场景",
+      "type": "select",
+      "options": [
+        "日常",
+        "晒娃",
+        "旅行",
+        "成就",
+        "吐槽"
+      ],
+      "required": true
+    },
+    {
+      "name": "tone",
+      "label": "语气",
+      "type": "select",
+      "options": [
+        "真诚",
+        "幽默",
+        "文艺",
+        "低调"
+      ],
+      "required": true
+    },
+    {
+      "name": "point",
+      "label": "想表达",
+      "type": "text",
+      "required": true,
+      "placeholder": "核心意思"
+    }
+  ],
+  "prompt": "写一条{{occasion}}的朋友圈文案，语气{{tone}}。想表达：{{point}}。\n\n输出：2-3 个版本（不同角度）+ 配图建议 + 是否加话题。克制不矫情。"
+}

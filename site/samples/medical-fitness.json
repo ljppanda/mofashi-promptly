@@ -1,0 +1,67 @@
+{
+  "title": "健身训练计划",
+  "industry": "医疗健康",
+  "task": "健身规划",
+  "summary": "按目标与器材定制分化训练，含热身拉伸与饮食配合",
+  "tags": [
+    "健身",
+    "训练",
+    "教练"
+  ],
+  "variables": [
+    {
+      "name": "goal",
+      "label": "训练目标",
+      "type": "select",
+      "options": [
+        "减脂",
+        "增肌",
+        "塑形",
+        "体能"
+      ],
+      "required": true
+    },
+    {
+      "name": "level",
+      "label": "训练水平",
+      "type": "select",
+      "options": [
+        "新手",
+        "进阶",
+        "资深"
+      ],
+      "required": true
+    },
+    {
+      "name": "days",
+      "label": "每周天数",
+      "type": "select",
+      "options": [
+        "3",
+        "4",
+        "5",
+        "6"
+      ],
+      "required": true
+    },
+    {
+      "name": "equipment",
+      "label": "器材条件",
+      "type": "select",
+      "options": [
+        "无器械",
+        "家用小器械",
+        "健身房"
+      ],
+      "required": true
+    },
+    {
+      "name": "limit",
+      "label": "伤病限制",
+      "type": "textarea",
+      "required": false,
+      "placeholder": "如：膝盖不适"
+    }
+  ],
+  "prompt": "你是持证健身教练，制定{{level}}的{{goal}}训练计划，每周{{days}}天，器材：{{equipment}}，限制：{{limit}}。\n\n输出：\n1. 每周分化安排（训练日/动作/组次/休息日）\n2. 热身与拉伸流程\n3. 进阶建议（何时加量）\n4. 饮食配合要点\n5. 风险提示（循序渐进、疼痛即停）\n非医疗建议，伤病请咨询医生。"
+}

@@ -1,0 +1,51 @@
+{
+  "title": "家庭医生",
+  "industry": "医疗健康",
+  "task": "家庭医生",
+  "summary": "基于症状与病史给出可能的方向、居家建议与就医信号（非诊断）",
+  "tags": [
+    "问诊",
+    "健康"
+  ],
+  "variables": [
+    {
+      "name": "age_group",
+      "label": "人群",
+      "type": "select",
+      "options": [
+        "儿童",
+        "成人",
+        "老人",
+        "孕妇"
+      ],
+      "required": true
+    },
+    {
+      "name": "symptom",
+      "label": "症状描述",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "描述主要症状、持续时间、加重/缓解因素"
+    },
+    {
+      "name": "history",
+      "label": "既往史",
+      "type": "text",
+      "required": false,
+      "placeholder": "慢性病/用药/过敏史（无可留空）"
+    },
+    {
+      "name": "want",
+      "label": "希望获得",
+      "type": "multiselect",
+      "options": [
+        "可能原因",
+        "居家建议",
+        "就医信号",
+        "就诊科室建议"
+      ],
+      "required": false
+    }
+  ],
+  "prompt": "你是一名耐心尽责的家庭医生。面对{{age_group}}患者，症状如下，既往史：{{history}}。\n请就 {{want}} 给出通俗说明。强调：这不是正式诊断，出现危险信号须及时线下就医。\n\n症状：\n{{symptom}}"
+}

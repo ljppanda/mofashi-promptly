@@ -1,0 +1,27 @@
+{
+  "name": "ppt-agent-server",
+  "version": "2.0.0",
+  "description": "AI 原生提示词工作台 - 服务端（TS）。托管静态站 + /relay 代理 + /agent 流式 Agent 端点。",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "serve": "node dist/index.js",
+    "verify:rag": "tsx scripts/verify_semantic_rag.ts",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.7.2",
+    "@lancedb/lancedb": "^0.31.0",
+    "@langchain/langgraph": "^1.4.8",
+    "dotenv": "^17.4.2",
+    "llamaindex": "^0.12.1",
+    "tsx": "^4.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "title": "简历优化",
+  "industry": "职场办公",
+  "task": "写作辅助",
+  "summary": "诊断简历问题并重写量化的经历 bullet",
+  "tags": [
+    "简历",
+    "求职",
+    "写作"
+  ],
+  "variables": [
+    {
+      "name": "target_role",
+      "label": "目标岗位",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：后端工程师"
+    },
+    {
+      "name": "experience",
+      "label": "工作经历",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "粘贴现有经历"
+    },
+    {
+      "name": "level",
+      "label": "求职阶段",
+      "type": "select",
+      "options": [
+        "校招",
+        "社招初级",
+        "资深"
+      ],
+      "required": true
+    },
+    {
+      "name": "highlight",
+      "label": "想突出",
+      "type": "text",
+      "required": false,
+      "placeholder": "如：高并发经验"
+    }
+  ],
+  "prompt": "你是简历顾问，优化一份投向{{target_role}}的简历（{{level}}）。现有经历：{{experience}}；想突出：{{highlight}}。\n\n输出：\n① 简历诊断（问题清单）\n② 改写后的经历 bullet（动作+量化结果）\n③ 关键词与 ATS 友好建议\n④ 可删减项\n要求：真实不夸大。"
+}

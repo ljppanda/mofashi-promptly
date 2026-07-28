@@ -1,0 +1,52 @@
+{
+  "title": "保密协议要点",
+  "industry": "法律",
+  "task": "文书起草",
+  "summary": "起草 NDA 核心条款框架并提示单方/双方差异",
+  "tags": [
+    "保密",
+    "NDA",
+    "合同"
+  ],
+  "variables": [
+    {
+      "name": "jurisdiction",
+      "label": "适用法域",
+      "type": "select",
+      "options": [
+        "中国大陆",
+        "中国香港",
+        "美国",
+        "欧盟"
+      ],
+      "required": true
+    },
+    {
+      "name": "parties",
+      "label": "双方",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：公司与候选人"
+    },
+    {
+      "name": "scope",
+      "label": "保密范围",
+      "type": "multiselect",
+      "options": [
+        "技术",
+        "商业",
+        "客户",
+        "其他"
+      ],
+      "required": true
+    },
+    {
+      "name": "term",
+      "label": "期限",
+      "type": "text",
+      "required": false,
+      "placeholder": "如：2 年"
+    }
+  ],
+  "prompt": "你是{{jurisdiction}}公司法律师，起草保密协议（NDA）要点框架。双方：{{parties}}；保密范围：{{scope}}；期限：{{term}}。\n\n输出：保密信息定义、义务与例外、使用限制、期限与终止后义务、违约责任、争议解决。提示：区分单方/双方 NDA，正式文本需法务复核。"
+}

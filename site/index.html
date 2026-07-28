@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>模法师 Promptly · AI 提示词模板架构师</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/src/styles.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+  <header class="site-header">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      <a href="#/" class="brand-mark">
+        <span class="brand-logo">✦</span>
+        <span>
+          模法师 <span class="brand-sub">Promptly</span>
+        </span>
+      </a>
+      <nav class="flex gap-1 text-sm items-center">
+        <a href="#/board" class="nav-link2">🔥 热度榜</a>
+        <a href="#/community" class="nav-link2">🌐 社区</a>
+        <a href="#/traces" class="nav-link2">🔍 可观测</a>
+        <a href="#/my" class="nav-link2">我的模板</a>
+        <button id="nav-import" class="nav-link2" style="background:transparent;border:0;cursor:pointer;">📥 导入</button>
+        <a href="#/settings" class="nav-link2">设置</a>
+      </nav>
+    </div>
+  </header>
+  <main id="app" class="max-w-5xl mx-auto px-4 py-6"></main>
+  <footer class="footer-note">模法师 Promptly · 说一句话，AI 帮你生成可复用的高质量提示词模板</footer>
+
+  <script type="module" src="/src/app.ts"></script>
+</body>
+</html>

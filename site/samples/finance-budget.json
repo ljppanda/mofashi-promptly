@@ -1,0 +1,45 @@
+{
+  "title": "个人预算表",
+  "industry": "金融",
+  "task": "理财规划",
+  "summary": "按月收入支出做结构与自动储蓄建议",
+  "tags": [
+    "预算",
+    "记账",
+    "理财"
+  ],
+  "variables": [
+    {
+      "name": "income",
+      "label": "月收入",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：1.5 万"
+    },
+    {
+      "name": "fixed",
+      "label": "固定支出",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "房租/贷/通勤等"
+    },
+    {
+      "name": "goal",
+      "label": "储蓄目标",
+      "type": "text",
+      "required": false,
+      "placeholder": "如：月存 3000"
+    },
+    {
+      "name": "style",
+      "label": "粒度",
+      "type": "select",
+      "options": [
+        "极简",
+        "详细"
+      ],
+      "required": false
+    }
+  ],
+  "prompt": "你是理财规划师，做月度预算（科普非建议）。月收入：{{income}}；固定支出：{{fixed}}；储蓄目标：{{goal}}；粒度：{{style}}。\n\n输出：收入-支出结构、必要/可选支出划分、储蓄率与自动储蓄建议、缓冲金设置、常见漏项。强调量入为出。"
+}

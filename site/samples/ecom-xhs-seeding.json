@@ -1,0 +1,46 @@
+{
+  "title": "小红书种草",
+  "industry": "电商运营",
+  "task": "内容创作",
+  "summary": "写像真人分享、有钩子有标签的小红书种草笔记",
+  "tags": [
+    "小红书",
+    "种草",
+    "文案"
+  ],
+  "variables": [
+    {
+      "name": "product",
+      "label": "产品",
+      "type": "text",
+      "required": true,
+      "placeholder": "如：某保湿精华"
+    },
+    {
+      "name": "audience",
+      "label": "目标人群",
+      "type": "select",
+      "options": [
+        "学生党",
+        "上班族",
+        "宝妈",
+        "精致党",
+        "通用"
+      ],
+      "required": true
+    },
+    {
+      "name": "tone",
+      "label": "风格",
+      "type": "select",
+      "options": [
+        "真诚分享",
+        "测评向",
+        "情绪价值",
+        "干货"
+      ],
+      "required": false
+    }
+  ],
+  "prompt": "你是小红书爆款文案写手，为一款产品写种草笔记。\n产品：{{product}}；目标人群：{{audience}}；风格：{{tone}}\n\n输出：\n- 标题（带 emoji、有钩子，≤20字）\n- 正文（分段，每段带 emoji，含痛点-体验-效果-呼吁，自然植入）\n- 5-8 个话题标签\n要求：像真人分享不像广告，避免绝对化用语。"
+}

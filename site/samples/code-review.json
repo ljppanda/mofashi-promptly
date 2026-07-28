@@ -1,0 +1,49 @@
+{
+  "title": "代码审查",
+  "industry": "编程开发",
+  "task": "代码审查",
+  "summary": "让 AI 扮演资深工程师，按指定关注点审查代码",
+  "tags": [
+    "python",
+    "go",
+    "typescript",
+    "security",
+    "performance"
+  ],
+  "variables": [
+    {
+      "name": "language",
+      "label": "编程语言",
+      "type": "select",
+      "options": [
+        "Python",
+        "Go",
+        "TypeScript",
+        "Java",
+        "Rust"
+      ],
+      "required": true
+    },
+    {
+      "name": "focus_areas",
+      "label": "关注重点",
+      "type": "multiselect",
+      "options": [
+        "性能",
+        "安全",
+        "可读性",
+        "边界情况",
+        "测试覆盖"
+      ],
+      "required": false
+    },
+    {
+      "name": "code",
+      "label": "待审查代码",
+      "type": "textarea",
+      "required": true,
+      "placeholder": "在此粘贴代码"
+    }
+  ],
+  "prompt": "你是一名资深 {{language}} 工程师。请审查下面这段代码，重点关注 {{focus_areas}}。\n输出：问题定位、严重程度、修改建议、修改后的代码片段。\n\n代码：\n{{code}}"
+}
