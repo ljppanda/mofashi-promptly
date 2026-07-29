@@ -11,15 +11,15 @@ export const LLM = (function () {
                           "gpt-5.3-codex", "gpt-5.2", "gpt-5.1", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-pro",
                           "o3", "o3-pro", "gpt-oss-120b", "gpt-oss-20b"],
                  default: "gpt-5.5",
-                 note: "GPT-4o/4.1/o4-mini 已退役；gpt-5.6 为 2026-07 新发旗舰，gpt-oss 为开放权重" },
+                 note: "gpt-5.x 为现役主力，gpt-4o/4.1 仍可用；gpt-5.6 为 2026-07 旗舰，gpt-oss 为开放权重" },
 
     deepseek:  { label: "DeepSeek",          style: "openai", base: "https://api.deepseek.com/v1",
-                 models: ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3.2", "deepseek-r1-0528"],
+                 models: ["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3.2", "deepseek-r1-0528", "deepseek-chat"],
                  default: "deepseek-v4-flash",
                  note: "deepseek-chat / deepseek-reasoner 已于 2026-07-24 退役，请改用 v4 系列" },
 
     moonshot:  { label: "Kimi（月之暗面）",   style: "openai", base: "https://api.moonshot.cn/v1",
-                 models: ["kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5", "kimi-k2"],
+                 models: ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6", "kimi-k2.5", "kimi-k2"],
                  default: "kimi-k2.6" },
 
     zhipu:     { label: "智谱 GLM",          style: "openai", base: "https://open.bigmodel.cn/api/paas/v4",
@@ -37,7 +37,7 @@ export const LLM = (function () {
                  note: "豆包需在火山方舟控制台创建推理接入点，模型名填该接入点的 Endpoint ID" },
 
     hunyuan:   { label: "腾讯混元",          style: "openai", base: "https://api.hunyuan.cloud.tencent.com/v1",
-                 models: ["hy3-preview", "hunyuan-role-latest", "hunyuan-turbo", "hunyuan-pro", "hunyuan-standard", "hunyuan-lite"],
+                 models: ["hy3-preview", "hunyuan-a13b-instruct", "hunyuan-role-latest", "hunyuan-turbo", "hunyuan-pro", "hunyuan-standard", "hunyuan-lite"],
                  default: "hy3-preview",
                  note: "hy3-preview 为 2026-04 新发开源 MoE 旗舰" },
 
@@ -49,14 +49,14 @@ export const LLM = (function () {
                  models: ["yi-2-large", "yi-large", "yi-medium", "yi-spark"], default: "yi-2-large" },
 
     grok:      { label: "Grok（xAI）",       style: "openai", base: "https://api.x.ai/v1",
-                 models: ["grok-4-latest", "grok-4-0709", "grok-4.5", "grok-4.3"], default: "grok-4-latest",
-                 note: "grok-4-latest 始终指向 xAI 当前最新版" },
+                 models: ["grok-4.5", "grok-4.3", "grok-4.20", "grok-4.20-multi-agent"], default: "grok-4.5",
+                 note: "grok-4.5 为稳定默认；grok-4.20 为最新旗舰（2026-07）" },
 
     mistral:   { label: "Mistral",           style: "openai", base: "https://api.mistral.ai/v1",
                  models: ["mistral-large-latest", "mistral-small-latest"], default: "mistral-small-latest" },
 
     ollama:    { label: "Ollama（本机）",     style: "openai", base: "http://localhost:11434/v1",
-                 models: ["llama3.3", "qwen3", "deepseek-r2", "gpt-oss-120b"], default: "llama3.3",
+                 models: ["llama3.3", "qwen3", "deepseek-r1", "gpt-oss-120b"], default: "llama3.3",
                  note: "本机需先 ollama pull 对应模型并运行 ollama serve" },
 
     openrouter: { label: "OpenRouter（聚合）", style: "openai", base: "https://openrouter.ai/api/v1",
@@ -77,14 +77,14 @@ export const LLM = (function () {
                  note: "模型名见 Together 控制台，可填任意在架模型 ID" },
 
     claude:    { label: "Claude（Anthropic）", style: "claude", base: "https://api.anthropic.com/v1",
-                 models: ["claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-                 default: "claude-sonnet-4-6",
-                 note: "Claude 3.x 全退役；claude-fable-5 为 2026-06 新发旗舰，haiku 需完整日期后缀" },
+                 models: ["claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-opus-4.8", "claude-sonnet-4.6", "claude-haiku-4.5"],
+                 default: "claude-sonnet-4.6",
+                 note: "Claude 3.x 全退役；claude-opus-5 为 2026 旗舰，claude-sonnet-4.6 为均衡默认（模型名用点号，如 claude-sonnet-4.6）" },
 
     gemini:    { label: "Gemini（Google）",   style: "gemini", base: "https://generativelanguage.googleapis.com/v1beta",
-                 models: ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"],
+                 models: ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-3.1-flash-lite", "gemini-2.5-flash"],
                  default: "gemini-3.5-flash",
-                 note: "gemini-3 系列多为 preview；gemini-3.5-flash 为 2026-05 稳定版" },
+                 note: "gemini-3 系列多为 preview；gemini-3.5-flash 为 2026-05 稳定版，gemini-3.6-flash 为最新" },
 
     ernie:     { label: "文心一言（百度）",   style: "ernie", base: "https://aip.baidubce.com",
                  models: ["ernie-4.5-8k", "ernie-4.0-8k", "ernie-3.5-8k", "ernie-speed-8k", "ernie-lite-8k"],
