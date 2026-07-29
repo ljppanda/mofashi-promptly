@@ -470,6 +470,9 @@ export const LLM = (function () {
   //   - gemini：GET {base}/models?key= → { models:[{name:"models/xxx"}] }
   // 通过 relayFetch 复用代理开关（代理模式下走 /relay，避免跨域 / 隐藏 Key）。
   const modelCache = new Map();
+  let orListCache = null; // 二级兜底源：OpenRouter 聚合目录（公开、无需 Key）
+  // 厂商 → OpenRouter 前缀映射；命中后剥离前缀与 :free/:batch 后缀得到该厂商原生模型 ID
+  const OR_FALLBACK = { openai: "openai", deepseek: "deepseek", moonshot: "moonshotai", qwen: "qwen", hunyuan: "tencent", grok: "x-ai", mistral: "mistralai", claude: "anthropic", gemini: "google" };
   async function listModels(provider, key, secret) {
     const p = PROVIDERS[provider];
     if (!p || provider === "ernie") return null;
@@ -487,21 +490,38 @@ export const LLM = (function () {
       url = p.base + "/models";
       headers = { "authorization": "Bearer " + (key || ""), "content-type": "application/json" };
     }
+    // 先拉厂商自身 /models
     try {
       const r = await relayFetch(url, "GET", headers, undefined);
-      if (!r.ok) return null;
-      const j = await r.json();
-      let ids = [];
-      if (p.style === "gemini") ids = (j.models || []).map(m => String(m.name || "").replace(/^models\//, "")).filter(Boolean);
-      else ids = (j.data || []).map(m => m.id).filter(Boolean);
-      ids = Array.from(new Set(ids));
-      if (!ids.length) return null;
-      modelCache.set(provider, ids);
-      try { localStorage.setItem(lsKey, JSON.stringify(ids)); } catch (e) {}
-      return ids;
-    } catch (e) {
-      return null;
+      if (r.ok) {
+        const j = await r.json();
+        let ids = [];
+        if (p.style === "gemini") ids = (j.models || []).map(m => String(m.name || "").replace(/^models\//, "")).filter(Boolean);
+        else ids = (j.data || []).map(m => m.id).filter(Boolean);
+        ids = Array.from(new Set(ids));
+        if (ids.length) { modelCache.set(provider, ids); try { localStorage.setItem(lsKey, JSON.stringify(ids)); } catch (e) {} return ids; }
+      }
+    } catch (e) {}
+    // 二级兜底：自身拉不到（无 Key / 不可达 / 不支持），从 OpenRouter 聚合目录取该厂商真实型号
+    const pre = OR_FALLBACK[provider];
+    if (pre) {
+      try {
+        if (!orListCache) {
+          const orr = await relayFetch("https://openrouter.ai/api/v1/models", "GET", { "content-type": "application/json" }, undefined);
+          if (orr.ok) { const oj = await orr.json(); orListCache = oj.data || []; }
+        }
+        if (Array.isArray(orListCache)) {
+          const prefix = pre + "/";
+          const ids = Array.from(new Set(orListCache
+            .map(m => m.id || "")
+            .filter(id => id.startsWith(prefix))
+            .map(id => id.slice(prefix.length).replace(/:(free|batch)$/, ""))
+            .filter(Boolean)));
+          if (ids.length) { modelCache.set(provider, ids); try { localStorage.setItem(lsKey, JSON.stringify(ids)); } catch (e) {} return ids; }
+        }
+      } catch (e) {}
     }
+    return null;
   }
 
   // ---------- 走服务端 Agent（/agent/*，带 RAG + 自审 + 流式）----------
