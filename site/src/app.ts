@@ -4,7 +4,7 @@ import { Store } from "./store.js";
 import { LLM } from "./llm.js";
 (function () {
   "use strict";
-  const app = () => document.getElementById("app");
+  const app = () => (document.getElementById("app") as HTMLElement);
 
   // 当前详情页模板（模块级，供生成提示词/下载复用）
   let current = null;
@@ -101,12 +101,12 @@ import { LLM } from "./llm.js";
         </div>`;
       document.body.appendChild(ov);
       const close = () => ov.remove();
-      const userEl = document.getElementById("auth-user");
-      const input = document.getElementById("auth-pass");
-      const msg = document.getElementById("auth-msg");
-      const ok = document.getElementById("auth-ok");
-      const cancel = document.getElementById("auth-cancel");
-      const toReg = document.getElementById("auth-to-reg");
+      const userEl = (document.getElementById("auth-user") as HTMLInputElement);
+      const input = (document.getElementById("auth-pass") as HTMLInputElement);
+      const msg = (document.getElementById("auth-msg") as HTMLElement);
+      const ok = (document.getElementById("auth-ok") as HTMLButtonElement);
+      const cancel = (document.getElementById("auth-cancel") as HTMLButtonElement);
+      const toReg = (document.getElementById("auth-to-reg") as HTMLAnchorElement);
       const submit = async () => {
         const username = (userEl && userEl.value || "").trim();
         const pass = input.value;
@@ -150,13 +150,13 @@ import { LLM } from "./llm.js";
         </div>`;
       document.body.appendChild(ov);
       const close = () => ov.remove();
-      const userEl = document.getElementById("reg-user");
-      const passEl = document.getElementById("reg-pass");
-      const pass2El = document.getElementById("reg-pass2");
-      const msg = document.getElementById("reg-msg");
-      const ok = document.getElementById("reg-ok");
-      const cancel = document.getElementById("reg-cancel");
-      const toLogin = document.getElementById("reg-to-login");
+      const userEl = (document.getElementById("reg-user") as HTMLInputElement);
+      const passEl = (document.getElementById("reg-pass") as HTMLInputElement);
+      const pass2El = (document.getElementById("reg-pass2") as HTMLInputElement);
+      const msg = (document.getElementById("reg-msg") as HTMLElement);
+      const ok = (document.getElementById("reg-ok") as HTMLButtonElement);
+      const cancel = (document.getElementById("reg-cancel") as HTMLButtonElement);
+      const toLogin = (document.getElementById("reg-to-login") as HTMLAnchorElement);
       const submit = async () => {
         const username = (userEl && userEl.value || "").trim();
         const pass = passEl.value;
@@ -346,10 +346,10 @@ import { LLM } from "./llm.js";
     `;
     renderList("");
     loadHotStrip();
-    document.getElementById("search").addEventListener("input", e => renderList(e.target.value));
-    document.getElementById("gen-btn").addEventListener("click", handleGenerate);
-    document.getElementById("gen-input").addEventListener("keydown", e => { if (e.key === "Enter") handleGenerate(); });
-    document.getElementById("gen-stop").addEventListener("click", () => { if (genController) genController.abort(); });
+    (document.getElementById("search") as HTMLInputElement).addEventListener("input", e => renderList((e.target as HTMLInputElement).value));
+    (document.getElementById("gen-btn") as HTMLButtonElement).addEventListener("click", handleGenerate);
+    (document.getElementById("gen-input") as HTMLInputElement).addEventListener("keydown", e => { if (e.key === "Enter") handleGenerate(); });
+    (document.getElementById("gen-stop") as HTMLButtonElement).addEventListener("click", () => { if (genController) genController.abort(); });
   }
 
   function renderList(q) {
@@ -358,7 +358,7 @@ import { LLM } from "./llm.js";
       if (!q) return true;
       return (t.title + t.summary + t.industry + (t.tags || []).join(" ")).toLowerCase().includes(q);
     });
-    const el = document.getElementById("list");
+    const el = (document.getElementById("list") as HTMLElement);
     if (!el) return;
     el.innerHTML = list.length
       ? list.map(card).join("")
@@ -401,7 +401,7 @@ import { LLM } from "./llm.js";
 
   // 展示 RAG 召回的参考范例（让“agent 有依据”可见）
   function renderRagRefs(refs) {
-    const el = document.getElementById("gen-rag");
+    const el = (document.getElementById("gen-rag") as HTMLElement);
     if (!el) return;
     if (!refs || !refs.length) { el.style.display = "none"; el.innerHTML = ""; return; }
     el.style.display = "block";
@@ -411,7 +411,7 @@ import { LLM } from "./llm.js";
       `</div>`;
   }
 
-  function renderGenSteps(activeKey, steps, containerId) {
+  function renderGenSteps(activeKey, steps, containerId = "gen-steps") {
     const el = document.getElementById(containerId || "gen-steps");
     if (!el) return;
     const list = steps || GEN_STEPS_5;
@@ -439,7 +439,7 @@ import { LLM } from "./llm.js";
   }
 
   // 把后端发来的“思考/产物”文本实时追加到当前激活步骤下
-  function appendThink(text, containerId) {
+  function appendThink(text, containerId = "gen-steps") {
     if (!text) return;
     if (!thinkLog[activeStepKey]) thinkLog[activeStepKey] = [];
     thinkLog[activeStepKey].push(text);
@@ -455,13 +455,13 @@ import { LLM } from "./llm.js";
   }
 
   async function handleGenerate() {
-    const msg = document.getElementById("gen-msg");
-    const live = document.getElementById("gen-live");
-    const genBtn = document.getElementById("gen-btn");
-    const stopBtn = document.getElementById("gen-stop");
-    const openBtn = document.getElementById("gen-open");
-    const industry = document.getElementById("gen-industry").value;
-    const sentence = document.getElementById("gen-input").value.trim();
+    const msg = (document.getElementById("gen-msg") as HTMLElement);
+    const live = (document.getElementById("gen-live") as HTMLElement);
+    const genBtn = (document.getElementById("gen-btn") as HTMLButtonElement);
+    const stopBtn = (document.getElementById("gen-stop") as HTMLButtonElement);
+    const openBtn = (document.getElementById("gen-open") as HTMLAnchorElement);
+    const industry = (document.getElementById("gen-industry") as HTMLSelectElement).value;
+    const sentence = (document.getElementById("gen-input") as HTMLInputElement).value.trim();
     if (!sentence) { msg.textContent = "请先描述你的需求。"; return; }
     live.style.display = "block";
     live.textContent = "";
@@ -651,17 +651,17 @@ import { LLM } from "./llm.js";
       <div id="msg" class="muted" style="font-size:.78rem;margin-top:12px;"></div>
     `;
 
-    document.getElementById("use-btn").addEventListener("click", handleUse);
-    const stopU = document.getElementById("use-stop");
+    (document.getElementById("use-btn") as HTMLButtonElement).addEventListener("click", handleUse);
+    const stopU = (document.getElementById("use-stop") as HTMLButtonElement);
     if (stopU) stopU.addEventListener("click", () => { if (useController) useController.abort(); });
-    document.getElementById("save-btn").addEventListener("click", toggleSave);
-    document.getElementById("dl-tpl-btn").addEventListener("click", downloadTemplate);
-    document.getElementById("use-copy").addEventListener("click", copyUsePrompt);
-    document.getElementById("use-dl-md").addEventListener("click", () => downloadUsePrompt("md"));
-    document.getElementById("use-dl-txt").addEventListener("click", () => downloadUsePrompt("txt"));
-    const runBtn = document.getElementById("use-run");
+    (document.getElementById("save-btn") as HTMLButtonElement).addEventListener("click", toggleSave);
+    (document.getElementById("dl-tpl-btn") as HTMLButtonElement).addEventListener("click", downloadTemplate);
+    (document.getElementById("use-copy") as HTMLButtonElement).addEventListener("click", copyUsePrompt);
+    (document.getElementById("use-dl-md") as HTMLButtonElement).addEventListener("click", () => downloadUsePrompt("md"));
+    (document.getElementById("use-dl-txt") as HTMLButtonElement).addEventListener("click", () => downloadUsePrompt("txt"));
+    const runBtn = (document.getElementById("use-run") as HTMLButtonElement);
     if (runBtn) runBtn.addEventListener("click", handleTestChat);
-    const publishBtn = document.getElementById("use-publish");
+    const publishBtn = (document.getElementById("use-publish") as HTMLButtonElement);
     if (publishBtn) publishBtn.addEventListener("click", () => {
       openPublishForm({
         title: tpl.title,
@@ -671,39 +671,39 @@ import { LLM } from "./llm.js";
         note: tpl.summary || "",
       });
     });
-    const runStop = document.getElementById("use-run-stop");
+    const runStop = (document.getElementById("use-run-stop") as HTMLButtonElement);
     if (runStop) runStop.addEventListener("click", () => { if (testController) testController.abort(); });
-    const testSend = document.getElementById("test-send");
+    const testSend = (document.getElementById("test-send") as HTMLButtonElement);
     if (testSend) testSend.addEventListener("click", sendTestMessage);
-    const testClear = document.getElementById("test-clear");
+    const testClear = (document.getElementById("test-clear") as HTMLButtonElement);
     if (testClear) testClear.addEventListener("click", clearTestChat);
     // 本页（模板详情）使用模板版 refine 上下文，供 F5 改写逻辑区分元素/状态
     refineCtx = templateRefineCtx();
-    const refineOpen = document.getElementById("refine-open");
+    const refineOpen = (document.getElementById("refine-open") as HTMLButtonElement);
     if (refineOpen) refineOpen.addEventListener("click", openRefineBox);
-    const refineGo = document.getElementById("refine-go");
+    const refineGo = (document.getElementById("refine-go") as HTMLButtonElement);
     if (refineGo) refineGo.addEventListener("click", handleRefine);
-    const refineCancel = document.getElementById("refine-cancel");
+    const refineCancel = (document.getElementById("refine-cancel") as HTMLButtonElement);
     if (refineCancel) refineCancel.addEventListener("click", closeRefineBox);
-    const testInput = document.getElementById("test-input");
+    const testInput = (document.getElementById("test-input") as HTMLTextAreaElement);
     if (testInput) testInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendTestMessage(); }
     });
 
     // 用户自定义归类：改行业分类后实时更新头部显示，保存时一并写入
-    const indSel = document.getElementById("set-industry");
+    const indSel = (document.getElementById("set-industry") as HTMLSelectElement);
     if (indSel) {
       indSel.addEventListener("change", e => {
-        current.industry = e.target.value;
-        const meta = document.getElementById("meta-industry");
+        current.industry = (e.target as HTMLInputElement).value;
+        const meta = (document.getElementById("meta-industry") as HTMLElement);
         if (meta) meta.textContent = current.industry;
-        const m = document.getElementById("msg");
+        const m = (document.getElementById("msg") as HTMLElement);
         if (m && !Store.hasMine(current.slug)) m.textContent = "已选择分类：" + current.industry + "（收藏后生效）";
       });
     }
 
     // 评分：星星点选 + 拉取当前评分
-    const stars = document.getElementById("rate-stars");
+    const stars = (document.getElementById("rate-stars") as HTMLElement);
     if (stars) {
       stars.querySelectorAll(".star").forEach(s => s.addEventListener("click", () => {
         rateTemplate(Number(s.getAttribute("data-n")));
@@ -714,7 +714,7 @@ import { LLM } from "./llm.js";
 
   // 高亮用户已选/将选的星数
   function highlightStars(n) {
-    const stars = document.getElementById("rate-stars");
+    const stars = (document.getElementById("rate-stars") as HTMLElement);
     if (!stars) return;
     stars.querySelectorAll(".star").forEach(s => {
       s.classList.toggle("on", Number(s.getAttribute("data-n")) <= n);
@@ -730,13 +730,13 @@ import { LLM } from "./llm.js";
     Store.setRating(id, score);
     highlightStars(score);
     loadRateInfo(id);
-    const m = document.getElementById("msg");
+    const m = (document.getElementById("msg") as HTMLElement);
     if (m) { m.textContent = "已评分 " + score + " 星 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); }
   }
 
   // 拉取并展示该模板的累计评分（均分 + 人数）
   async function loadRateInfo(id) {
-    const info = document.getElementById("rate-info");
+    const info = (document.getElementById("rate-info") as HTMLElement);
     if (!info || !id) return;
     highlightStars(Store.getRating(id) || 0);
     try {
@@ -759,17 +759,17 @@ import { LLM } from "./llm.js";
 
   // 用模板生成成品提示词：先访谈确认信息，再让模型代写（F3 + F2 串联）
   async function handleUse() {
-    const msg = document.getElementById("msg");
-    const live = document.getElementById("use-live");
-    const goal = (document.getElementById("use-goal").value || "").trim();
+    const msg = (document.getElementById("msg") as HTMLElement);
+    const live = (document.getElementById("use-live") as HTMLElement);
+    const goal = ((document.getElementById("use-goal") as HTMLTextAreaElement).value || "").trim();
     if (!goal) { msg.textContent = "请先描述你的目标。"; return; }
 
-    const useBtn = document.getElementById("use-btn");
+    const useBtn = (document.getElementById("use-btn") as HTMLButtonElement);
     if (useBtn) { useBtn.disabled = true; useBtn.style.opacity = ".55"; } // 锁定按钮，防止重复提交
     live.style.display = "none";
     live.textContent = "";
-    document.getElementById("use-actions").style.display = "none";
-    document.getElementById("gen-rag").style.display = "none";
+    (document.getElementById("use-actions") as HTMLElement).style.display = "none";
+    (document.getElementById("gen-rag") as HTMLElement).style.display = "none";
     msg.textContent = "分析中，请稍候…";
     useQa = [];
     useRound = 0;
@@ -780,7 +780,7 @@ import { LLM } from "./llm.js";
 
   // 单轮访谈：调 /agent/clarify，complete 则进入生成，否则渲染问题让用户确认
   async function runInterviewRound(goal, msg, live) {
-    const clarifyBox = document.getElementById("use-clarify");
+    const clarifyBox = (document.getElementById("use-clarify") as HTMLElement);
     const sel = new AbortController();
     useController = sel;
     let data;
@@ -804,8 +804,8 @@ import { LLM } from "./llm.js";
           </div>
         </div>
         <div id="clarify-q"></div>`;
-      const thinkStream = document.getElementById("clarify-think-stream");
-      const onNode = (name) => { if (name === "clarify") { const el = document.getElementById("think-clarify"); if (el) el.classList.add("is-active"); } };
+      const thinkStream = (document.getElementById("clarify-think-stream") as HTMLElement);
+      const onNode = (name) => { if (name === "clarify") { const el = (document.getElementById("think-clarify") as HTMLElement); if (el) el.classList.add("is-active"); } };
       const onThink = (text) => {
         if (thinkStream) { const line = document.createElement("div"); line.className = "think-line"; line.textContent = "▸ " + text; thinkStream.appendChild(line); }
       };
@@ -826,14 +826,14 @@ import { LLM } from "./llm.js";
   // 渲染本轮问题：每个选项 chip 可点选，也允许自由补充；确认后收集答案进入下一轮
   function renderClarifyQuestions(questions, goal, msg, live) {
     // 先把访谈"思考步"标记完成，并保留思考过程可见（不覆盖）
-    const thinkItem = document.getElementById("think-clarify");
+    const thinkItem = (document.getElementById("think-clarify") as HTMLElement);
     if (thinkItem) {
       thinkItem.classList.remove("active");
       thinkItem.classList.add("done");
       const dot = thinkItem.querySelector(".step-dot");
       if (dot) dot.innerHTML = "✓";
     }
-    const qBox = document.getElementById("clarify-q");
+    const qBox = (document.getElementById("clarify-q") as HTMLElement);
     const roundLabel = useRound + 1;
     const qText = questions.map(q => q.question);
     const historyHtml = useQa.length
@@ -864,30 +864,30 @@ import { LLM } from "./llm.js";
         qBox.querySelector(`.opt-row[data-qi="${qi}"]`).querySelectorAll(".opt-chip").forEach(b => b.classList.remove("sel"));
         btn.classList.add("sel");
         selState[qi] = { q: qText[qi], a: btn.textContent };
-        const free = qBox.querySelector(`.q-free[data-qi="${qi}"]`);
+        const free = qBox.querySelector<HTMLInputElement>(`.q-free[data-qi="${qi}"]`);
         if (free) free.value = "";
       });
     });
-    if (qBox) qBox.querySelectorAll(".q-free").forEach(inp => {
+    if (qBox) qBox.querySelectorAll<HTMLInputElement>(".q-free").forEach(inp => {
       inp.addEventListener("input", () => {
         const qi = inp.getAttribute("data-qi");
         if (inp.value.trim()) { selState[qi] = { q: qText[qi], a: inp.value.trim() }; }
         else if (selState[qi] && selState[qi].a === inp.value.trim()) { delete selState[qi]; }
       });
     });
-    document.getElementById("clarify-skip").addEventListener("click", () => {
-      const okBtn = document.getElementById("clarify-ok");
-      const skipBtn = document.getElementById("clarify-skip");
+    (document.getElementById("clarify-skip") as HTMLButtonElement).addEventListener("click", () => {
+      const okBtn = (document.getElementById("clarify-ok") as HTMLButtonElement);
+      const skipBtn = (document.getElementById("clarify-skip") as HTMLButtonElement);
       if (okBtn) okBtn.disabled = true;
       if (skipBtn) { skipBtn.disabled = true; skipBtn.style.opacity = ".55"; } // 锁定，防重复提交
       if (qBox) qBox.innerHTML = '<div class="clarify-head">🤖 正在生成你的提示词，请稍候…<span class="spinner"></span></div>';
       startUseGeneration(buildCombinedGoal(goal, useQa), msg, live);
     });
-    document.getElementById("clarify-ok").addEventListener("click", () => {
+    (document.getElementById("clarify-ok") as HTMLButtonElement).addEventListener("click", () => {
       const answers = Object.keys(selState).map(k => ({ question: selState[k].q, answer: selState[k].a }));
       if (!answers.length) { msg.textContent = "请至少选择或修改一项，或点「跳过」。"; return; }
-      const okBtn = document.getElementById("clarify-ok");
-      const skipBtn = document.getElementById("clarify-skip");
+      const okBtn = (document.getElementById("clarify-ok") as HTMLButtonElement);
+      const skipBtn = (document.getElementById("clarify-skip") as HTMLButtonElement);
       if (okBtn) { okBtn.disabled = true; okBtn.style.opacity = ".55"; } // 锁定本轮，防重复提交
       if (skipBtn) skipBtn.disabled = true;
       useQa = useQa.concat(answers);
@@ -899,21 +899,21 @@ import { LLM } from "./llm.js";
 
   // 进入生成：把"目标 + 已确认问答"交给 /agent/use 代写成品提示词
   async function startUseGeneration(goal, msg, live) {
-    const clarifyBox = document.getElementById("use-clarify");
+    const clarifyBox = (document.getElementById("use-clarify") as HTMLElement);
     clarifyBox.style.display = "none";
     clarifyBox.innerHTML = "";
     if (useQa.length) {
       clarifyBox.style.display = "block";
       clarifyBox.innerHTML = `<div class="clarify-done">✓ 已确认 ${useQa.length} 项关键信息，正在据此生成提示词…</div>`;
     }
-    const btn = document.getElementById("use-btn");
-    const stopBtn = document.getElementById("use-stop");
-    const actions = document.getElementById("use-actions");
+    const btn = (document.getElementById("use-btn") as HTMLButtonElement);
+    const stopBtn = (document.getElementById("use-stop") as HTMLButtonElement);
+    const actions = (document.getElementById("use-actions") as HTMLElement);
     live.style.display = "block";
     live.textContent = "";
     actions.style.display = "none";
     // 主卡片标题：进入生成时重置为「成品提示词」（避免沿用上一次的「改进版」标记）
-    const liveLabel = document.getElementById("use-live-label");
+    const liveLabel = (document.getElementById("use-live-label") as HTMLElement);
     if (liveLabel) { liveLabel.style.display = "block"; liveLabel.textContent = "📋 成品提示词"; liveLabel.className = "live-label"; }
     msg.textContent = "模型代写中（检索范例 → 撰写 → 定稿）…";
     thinkLog = {}; activeStepKey = "";
@@ -945,7 +945,7 @@ import { LLM } from "./llm.js";
       current._lastPrompt = res.prompt || "";
       metricBump(tplId(current), "use", 1, current.title, current.industry);
       renderGenSteps("__done__", GEN_STEPS_3);
-      const usageEl = document.getElementById("use-usage");
+      const usageEl = (document.getElementById("use-usage") as HTMLElement);
       if (res.usage) usageEl.textContent = "📊 " + fmtUsage(res.usage, res.elapsedMs);
       actions.style.display = "flex";
       msg.textContent = "✓ 已生成成品提示词（模型已结合你确认的信息写好具体内容）。";
@@ -966,26 +966,26 @@ import { LLM } from "./llm.js";
 
   // 测试沙盒：把生成的成品提示词当作"系统设定"，与用户多轮自由对话，实时判断提示词好不好用
   function handleTestChat() {
-    const wrap = document.getElementById("use-run-wrap");
-    const promptEl = document.getElementById("test-prompt");
+    const wrap = (document.getElementById("use-run-wrap") as HTMLElement);
+    const promptEl = (document.getElementById("test-prompt") as HTMLElement);
     if (!wrap || !promptEl) return;
     wrap.style.display = "block";
     promptEl.textContent = current._lastPrompt || "（尚未生成提示词）";
     if (!current._lastPrompt) {
-      const m = document.getElementById("msg");
+      const m = (document.getElementById("msg") as HTMLElement);
       if (m) m.textContent = "请先生成提示词再测试。";
       return;
     }
-    const log = document.getElementById("test-log");
+    const log = (document.getElementById("test-log") as HTMLElement);
     if (log && !log.children.length && !testMessages.length) {
       log.innerHTML = '<div class="test-empty muted">对话已开始 —— 在下方输入问题，模型会按上面的提示词作答。可连续追问，检验提示词是否好用。</div>';
     }
-    const input = document.getElementById("test-input");
+    const input = (document.getElementById("test-input") as HTMLTextAreaElement);
     if (input) input.focus();
   }
 
   function appendTestBubble(text, role) {
-    const log = document.getElementById("test-log");
+    const log = (document.getElementById("test-log") as HTMLElement);
     if (!log) return;
     const b = document.createElement("div");
     b.className = "test-bubble " + role;
@@ -999,19 +999,19 @@ import { LLM } from "./llm.js";
 
   function clearTestChat() {
     testMessages = [];
-    const log = document.getElementById("test-log");
+    const log = (document.getElementById("test-log") as HTMLElement);
     if (log) log.innerHTML = '<div class="test-empty muted">对话已清空 —— 重新输入问题开始测试。</div>';
-    const usageEl = document.getElementById("use-run-usage");
+    const usageEl = (document.getElementById("use-run-usage") as HTMLElement);
     if (usageEl) usageEl.textContent = "";
   }
 
   async function sendTestMessage() {
-    const input = document.getElementById("test-input");
-    const log = document.getElementById("test-log");
-    const m = document.getElementById("msg");
-    const sendBtn = document.getElementById("test-send");
-    const stopBtn = document.getElementById("use-run-stop");
-    const usageEl = document.getElementById("use-run-usage");
+    const input = (document.getElementById("test-input") as HTMLTextAreaElement);
+    const log = (document.getElementById("test-log") as HTMLElement);
+    const m = (document.getElementById("msg") as HTMLElement);
+    const sendBtn = (document.getElementById("test-send") as HTMLButtonElement);
+    const stopBtn = (document.getElementById("use-run-stop") as HTMLButtonElement);
+    const usageEl = (document.getElementById("use-run-usage") as HTMLElement);
     if (!input || !log) return;
     const text = input.value.trim();
     if (!text) return;
@@ -1072,7 +1072,7 @@ import { LLM } from "./llm.js";
     const ctx = refineCtx;
     if (!ctx) return;
     const box = document.getElementById(ctx.boxId);
-    const fb = document.getElementById(ctx.feedbackId);
+    const fb = document.getElementById(ctx.feedbackId) as HTMLInputElement;
     const steps = document.getElementById(ctx.stepsId);
     const live = document.getElementById(ctx.liveId);
     const result = document.getElementById(ctx.resultId);
@@ -1086,7 +1086,7 @@ import { LLM } from "./llm.js";
     const ctx = refineCtx;
     if (!ctx) return;
     const box = document.getElementById(ctx.boxId);
-    const fb = document.getElementById(ctx.feedbackId);
+    const fb = document.getElementById(ctx.feedbackId) as HTMLInputElement;
     if (box) box.style.display = "none";
     if (fb) fb.value = "";
   }
@@ -1094,11 +1094,11 @@ import { LLM } from "./llm.js";
   async function handleRefine() {
     const ctx = refineCtx;
     if (!ctx) return;
-    const fb = document.getElementById(ctx.feedbackId);
+    const fb = document.getElementById(ctx.feedbackId) as HTMLInputElement;
     const live = document.getElementById(ctx.liveId);
     const result = document.getElementById(ctx.resultId);
-    const goBtn = document.getElementById(ctx.goId);
-    const cancelBtn = document.getElementById(ctx.cancelId);
+    const goBtn = document.getElementById(ctx.goId) as HTMLButtonElement;
+    const cancelBtn = document.getElementById(ctx.cancelId) as HTMLButtonElement;
     const m = document.getElementById(ctx.msgId);
     const feedback = fb ? fb.value.trim() : "";
     if (!feedback) { if (m) m.textContent = "请先描述你希望改进的地方。"; return; }
@@ -1167,8 +1167,8 @@ import { LLM } from "./llm.js";
         <button id="refine-discard" class="btn btn-ghost btn-sm">放弃本次改写</button>
         <span class="muted" style="font-size:.75rem;">采用后将替换当前测试提示词，并重置测试对话以便重新验证效果</span>
       </div>`;
-    document.getElementById("refine-apply").addEventListener("click", () => applyRefine(newPrompt));
-    document.getElementById("refine-discard").addEventListener("click", () => {
+    (document.getElementById("refine-apply") as HTMLButtonElement).addEventListener("click", () => applyRefine(newPrompt));
+    (document.getElementById("refine-discard") as HTMLButtonElement).addEventListener("click", () => {
       box.style.display = "none"; box.innerHTML = "";
       const mm = document.getElementById(ctx.msgId);
       if (mm) { mm.textContent = "已放弃本次改写。"; setTimeout(() => { if (mm) mm.textContent = ""; }, 2000); }
@@ -1199,7 +1199,7 @@ import { LLM } from "./llm.js";
     const steps = document.getElementById(ctx.stepsId);
     if (steps) { steps.style.display = "none"; steps.innerHTML = ""; }
     const rbox = document.getElementById(ctx.boxId);
-    if (rbox) { rbox.style.display = "none"; const fb = document.getElementById(ctx.feedbackId); if (fb) fb.value = ""; }
+    if (rbox) { rbox.style.display = "none"; const fb = document.getElementById(ctx.feedbackId) as HTMLInputElement; if (fb) fb.value = ""; }
     const m = document.getElementById(ctx.msgId);
     if (m) { m.textContent = "✓ 已采用改进版提示词，可重新测试。"; setTimeout(() => { if (m) m.textContent = ""; }, 2500); }
   }
@@ -1253,8 +1253,8 @@ import { LLM } from "./llm.js";
 
   function copyUsePrompt() {
     const text = current._lastPrompt || "";
-    if (!text) { const m = document.getElementById("msg"); if (m) m.textContent = "还没有生成提示词。"; return; }
-    const m = document.getElementById("msg");
+    if (!text) { const m = (document.getElementById("msg") as HTMLElement); if (m) m.textContent = "还没有生成提示词。"; return; }
+    const m = (document.getElementById("msg") as HTMLElement);
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(
         () => { m.textContent = "已复制提示词 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); },
@@ -1267,7 +1267,7 @@ import { LLM } from "./llm.js";
 
   function downloadUsePrompt(fmt) {
     const text = current._lastPrompt || "";
-    if (!text) { const m = document.getElementById("msg"); if (m) m.textContent = "还没有生成提示词。"; return; }
+    if (!text) { const m = (document.getElementById("msg") as HTMLElement); if (m) m.textContent = "还没有生成提示词。"; return; }
     const mime = fmt === "md" ? "text/markdown" : "text/plain";
     const fname = (current.slug || "prompt") + (fmt === "md" ? ".md" : ".txt");
     const blob = new Blob([text], { type: mime + ";charset=utf-8" });
@@ -1276,7 +1276,7 @@ import { LLM } from "./llm.js";
     a.href = url; a.download = fname;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    const m = document.getElementById("msg");
+    const m = (document.getElementById("msg") as HTMLElement);
     if (m) { m.textContent = "已下载 " + fname + " ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2500); }
   }
 
@@ -1293,7 +1293,7 @@ import { LLM } from "./llm.js";
     a.href = url; a.download = (current.slug || "template") + ".template.json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    const m = document.getElementById("msg");
+    const m = (document.getElementById("msg") as HTMLElement);
     if (m) { m.textContent = "已下载模板 JSON ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2500); }
   }
 
@@ -1301,11 +1301,11 @@ import { LLM } from "./llm.js";
     const id = tplId(current);
     if (Store.hasMine(current.slug)) {
       Store.removeMine(current.slug);
-      document.getElementById("save-btn").textContent = "☆ 收藏到我的模板";
+      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "☆ 收藏到我的模板";
       metricBump(id, "favorite", -1, current.title, current.industry);
     } else {
       Store.addMine(current);
-      document.getElementById("save-btn").textContent = "★ 已收藏";
+      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
       metricBump(id, "favorite", 1, current.title, current.industry);
     }
   }
@@ -1329,7 +1329,8 @@ import { LLM } from "./llm.js";
         summary: d.summary || "",
         tags: Array.isArray(d.tags) ? d.tags : [],
         variables: Array.isArray(d.variables) ? d.variables : [],
-        prompt: d.prompt
+        prompt: d.prompt,
+        slug: "", generated: false, imported: false
       };
     }
     if (d && Array.isArray(d.messages)) {
@@ -1343,7 +1344,8 @@ import { LLM } from "./llm.js";
         summary: "",
         tags: [],
         variables: [],
-        prompt: content
+        prompt: content,
+        slug: "", generated: false, imported: false
       };
     }
     return null;
@@ -1353,7 +1355,7 @@ import { LLM } from "./llm.js";
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const data = JSON.parse(reader.result);
+        const data = JSON.parse(reader.result as string);
         const obj = normalizeImport(data);
         if (!obj) { alert("无法识别的模板文件格式（需含 prompt 或 messages 字段）。"); return; }
         obj.slug = "import-" + Date.now();
@@ -1386,7 +1388,7 @@ import { LLM } from "./llm.js";
         ? groupedMineHtml(all)
         : '<p class="muted" style="margin-top:16px;">还没有收藏的模板。在模板详情页点「收藏到我的模板」即可，AI 生成的草稿也会自动保留在此；也可点右上「导入模板」载入本地 JSON。</p>'}
     `;
-    const ib = document.getElementById("my-import");
+    const ib = (document.getElementById("my-import") as HTMLButtonElement);
     if (ib) ib.addEventListener("click", openImportFile);
     app().querySelectorAll(".del-btn").forEach((b) => b.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1478,7 +1480,7 @@ import { LLM } from "./llm.js";
   }
 
   async function renderBoard(sort) {
-    const wrap = document.getElementById("board-wrap");
+    const wrap = (document.getElementById("board-wrap") as HTMLElement);
     if (!wrap) return;
     wrap.innerHTML = "加载中…";
     try {
@@ -1503,7 +1505,7 @@ import { LLM } from "./llm.js";
 
   // 首页“热门模板 Top5”
   async function loadHotStrip() {
-    const el = document.getElementById("hot-strip");
+    const el = (document.getElementById("hot-strip") as HTMLElement);
     if (!el) return;
     try {
       const rows = await (await fetch("/metrics/board?sort=heat&limit=5")).json();
@@ -1571,13 +1573,13 @@ import { LLM } from "./llm.js";
       </div>
       <p class="text-xs muted mt-4">提示：部分国内模型需网络可直连；若不行，可开启上方代理模式。</p>
     `;
-    const providerSel = document.getElementById("set-provider");
+    const providerSel = (document.getElementById("set-provider") as HTMLSelectElement);
     function populateModels(p) {
       const prov = LLM.PROVIDERS[p];
-      const sel = document.getElementById("set-model");
+      const sel = (document.getElementById("set-model") as HTMLSelectElement);
       sel.innerHTML = (prov.models || []).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
       if (s.model && (prov.models || []).indexOf(s.model) !== -1) sel.value = s.model;
-      const wrap = document.getElementById("secret-wrap");
+      const wrap = (document.getElementById("secret-wrap") as HTMLElement);
       if (prov.needSecret) wrap.style.display = "block"; else wrap.style.display = "none";
       const note = prov.note ? `<p class="text-xs text-slate-400 mt-1">${esc(prov.note)}</p>` : "";
       wrap.insertAdjacentHTML("afterend", note);
@@ -1586,25 +1588,25 @@ import { LLM } from "./llm.js";
     populateModels(providerSel.value);
     providerSel.addEventListener("change", e => {
       document.querySelectorAll("#secret-wrap ~ p.text-xs").forEach(n => n.remove());
-      populateModels(e.target.value);
+      populateModels((e.target as HTMLInputElement).value);
     });
-    document.getElementById("set-save").addEventListener("click", () => {
+    (document.getElementById("set-save") as HTMLButtonElement).addEventListener("click", () => {
       const provider = providerSel.value;
-      const model = document.getElementById("set-model").value;
-      const customModel = document.getElementById("set-custom").value.trim();
-      const key = document.getElementById("set-key").value.trim();
-      const secret = document.getElementById("set-secret") ? document.getElementById("set-secret").value.trim() : "";
-      const useProxy = document.getElementById("set-proxy").checked;
-      const proxyBase = document.getElementById("set-proxy-base").value.trim();
+      const model = (document.getElementById("set-model") as HTMLSelectElement).value;
+      const customModel = (document.getElementById("set-custom") as HTMLInputElement).value.trim();
+      const key = (document.getElementById("set-key") as HTMLInputElement).value.trim();
+      const secret = (document.getElementById("set-secret") as HTMLInputElement) ? (document.getElementById("set-secret") as HTMLInputElement).value.trim() : "";
+      const useProxy = (document.getElementById("set-proxy") as HTMLInputElement).checked;
+      const proxyBase = (document.getElementById("set-proxy-base") as HTMLInputElement).value.trim();
       Store.saveSettings({ provider, model, customModel, key, secret, useProxy, proxyBase });
-      document.getElementById("set-msg").textContent = "已保存 ✓";
-      document.getElementById("eff").textContent = LLM.effectiveLabel();
+      (document.getElementById("set-msg") as HTMLElement).textContent = "已保存 ✓";
+      (document.getElementById("eff") as HTMLElement).textContent = LLM.effectiveLabel();
     });
 
     // 登录/注册状态显示 + 切换账号 / 退出
-    const authState = document.getElementById("auth-state");
-    const authLoginBtn = document.getElementById("auth-login-btn");
-    const authLogoutBtn = document.getElementById("auth-logout-btn");
+    const authState = (document.getElementById("auth-state") as HTMLElement);
+    const authLoginBtn = (document.getElementById("auth-login-btn") as HTMLButtonElement);
+    const authLogoutBtn = (document.getElementById("auth-logout-btn") as HTMLButtonElement);
     const refreshAuthUI = () => {
       const on = LLM.authIsAuthed();
       const admin = LLM.isAdmin();
@@ -1627,19 +1629,19 @@ import { LLM } from "./llm.js";
     // 读取当前表单值为覆盖参数，供测试连接使用（无需先保存）
     function readForm() {
       const prov = providerSel.value;
-      const secretEl = document.getElementById("set-secret");
+      const secretEl = (document.getElementById("set-secret") as HTMLInputElement);
       return {
         provider: prov,
-        model: document.getElementById("set-model").value,
-        customModel: document.getElementById("set-custom").value.trim(),
-        key: document.getElementById("set-key").value.trim(),
+        model: (document.getElementById("set-model") as HTMLSelectElement).value,
+        customModel: (document.getElementById("set-custom") as HTMLInputElement).value.trim(),
+        key: (document.getElementById("set-key") as HTMLInputElement).value.trim(),
         secret: secretEl ? secretEl.value.trim() : ""
       };
     }
 
-    document.getElementById("set-test").addEventListener("click", async () => {
-      const btn = document.getElementById("set-test");
-      const msg = document.getElementById("test-msg");
+    (document.getElementById("set-test") as HTMLButtonElement).addEventListener("click", async () => {
+      const btn = (document.getElementById("set-test") as HTMLButtonElement);
+      const msg = (document.getElementById("test-msg") as HTMLElement);
       const over = readForm();
       btn.disabled = true;
       btn.textContent = "测试中…";
@@ -1709,26 +1711,26 @@ import { LLM } from "./llm.js";
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-    const cancelBtn = document.getElementById("pf-cancel");
+    const cancelBtn = (document.getElementById("pf-cancel") as HTMLButtonElement);
     if (cancelBtn) cancelBtn.addEventListener("click", close);
-    const submitBtn = document.getElementById("pf-submit");
+    const submitBtn = (document.getElementById("pf-submit") as HTMLButtonElement);
     if (submitBtn) submitBtn.addEventListener("click", async () => {
-      const title = document.getElementById("pf-title").value.trim();
+      const title = (document.getElementById("pf-title") as HTMLInputElement).value.trim();
       const prompt = (prefill.prompt || "").trim();
-      if (!title) { document.getElementById("pf-msg").textContent = "请填写标题。"; return; }
-      if (!prompt) { document.getElementById("pf-msg").textContent = "没有可发布的提示词正文。"; return; }
-      const tags = document.getElementById("pf-tags").value.split(/[,，、]/).map(s => s.trim()).filter(Boolean).slice(0, 8);
-      const author = document.getElementById("pf-author").value.trim() || "匿名";
-      const note = document.getElementById("pf-note").value.trim();
-      const industry = document.getElementById("pf-industry").value;
+      if (!title) { (document.getElementById("pf-msg") as HTMLElement).textContent = "请填写标题。"; return; }
+      if (!prompt) { (document.getElementById("pf-msg") as HTMLElement).textContent = "没有可发布的提示词正文。"; return; }
+      const tags = (document.getElementById("pf-tags") as HTMLInputElement).value.split(/[,，、]/).map(s => s.trim()).filter(Boolean).slice(0, 8);
+      const author = (document.getElementById("pf-author") as HTMLInputElement).value.trim() || "匿名";
+      const note = (document.getElementById("pf-note") as HTMLTextAreaElement).value.trim();
+      const industry = (document.getElementById("pf-industry") as HTMLSelectElement).value;
       submitBtn.disabled = true; submitBtn.style.opacity = ".55";
-      document.getElementById("pf-msg").textContent = "发布中…";
+      (document.getElementById("pf-msg") as HTMLElement).textContent = "发布中…";
       try {
         await LLM.communityPublish({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, industry, author, tags, note, prompt });
         close();
         toast("✓ 已发布到草稿「" + title + "」，去社区广场-我的发布里点「公开」即可上架");
       } catch (e) {
-        document.getElementById("pf-msg").textContent = "发布失败：" + e.message;
+        (document.getElementById("pf-msg") as HTMLElement).textContent = "发布失败：" + e.message;
         submitBtn.disabled = false; submitBtn.style.opacity = "1";
       }
     });
@@ -1759,8 +1761,8 @@ import { LLM } from "./llm.js";
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-    const yes = document.getElementById("cd-yes");
-    const no = document.getElementById("cd-no");
+    const yes = (document.getElementById("cd-yes") as HTMLButtonElement);
+    const no = (document.getElementById("cd-no") as HTMLButtonElement);
     if (no) no.addEventListener("click", close);
     if (yes) yes.addEventListener("click", async () => {
       yes.disabled = true; yes.style.opacity = ".55";
@@ -1799,13 +1801,13 @@ import { LLM } from "./llm.js";
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
-    const no = document.getElementById("rd-no");
+    const no = (document.getElementById("rd-no") as HTMLButtonElement);
     if (no) no.addEventListener("click", close);
-    const yes = document.getElementById("rd-yes");
+    const yes = (document.getElementById("rd-yes") as HTMLButtonElement);
     if (yes) yes.addEventListener("click", async () => {
       yes.disabled = true; yes.style.opacity = ".55";
-      const reason = document.getElementById("rd-reason").value;
-      const detail = document.getElementById("rd-detail").value.trim();
+      const reason = (document.getElementById("rd-reason") as HTMLSelectElement).value;
+      const detail = (document.getElementById("rd-detail") as HTMLTextAreaElement).value.trim();
       try {
         await LLM.communityReport(id, reason, detail);
         toast("✓ 举报已提交，管理员会处理");
@@ -1842,13 +1844,13 @@ import { LLM } from "./llm.js";
       <div id="cm-wrap" class="mt-4">加载中…</div>
     `;
     let tab = "square";
-    const qEl = document.getElementById("cm-q");
-    const sortEl = document.getElementById("cm-sort");
-    const industryEl = document.getElementById("cm-industry");
+    const qEl = (document.getElementById("cm-q") as HTMLInputElement);
+    const sortEl = (document.getElementById("cm-sort") as HTMLSelectElement);
+    const industryEl = (document.getElementById("cm-industry") as HTMLSelectElement);
     async function load() {
-      const wrap = document.getElementById("cm-wrap");
+      const wrap = (document.getElementById("cm-wrap") as HTMLElement);
       if (!wrap) return;
-      if (tab === "mod") { await moderationConsole(); return; }
+      if (tab === "mod") { await moderationConsole(load); return; }
       wrap.innerHTML = "加载中…";
       try {
         let rows;
@@ -1897,7 +1899,7 @@ import { LLM } from "./llm.js";
       document.querySelectorAll("#app .tab-btn").forEach(x => x.classList.toggle("active", x === b));
       load();
     }));
-    const searchBtn = document.getElementById("cm-search");
+    const searchBtn = (document.getElementById("cm-search") as HTMLButtonElement);
     if (searchBtn) searchBtn.addEventListener("click", load);
     if (qEl) qEl.addEventListener("keydown", e => { if (e.key === "Enter") load(); });
     if (sortEl) sortEl.addEventListener("change", load);
@@ -1905,8 +1907,8 @@ import { LLM } from "./llm.js";
     load();
   }
 
-  async function moderationConsole() {
-    const wrap = document.getElementById("cm-wrap");
+  async function moderationConsole(reload) {
+    const wrap = (document.getElementById("cm-wrap") as HTMLElement);
     if (!wrap) return;
     wrap.innerHTML = "加载中…";
     if (!LLM.isAdmin()) {
@@ -1965,18 +1967,18 @@ import { LLM } from "./llm.js";
     wrap.querySelectorAll(".cm-publish").forEach(b => b.addEventListener("click", async () => {
       await LLM.communityPublishNow(b.getAttribute("data-id"));
       toast("✓ 已公开到社区广场");
-      load();
+      reload();
     }));
     wrap.querySelectorAll(".cm-unpublish").forEach(b => b.addEventListener("click", async () => {
       await LLM.communityUnpublish(b.getAttribute("data-id"));
       toast("已退回草稿");
-      load();
+      reload();
     }));
     wrap.querySelectorAll(".cm-del").forEach(b => b.addEventListener("click", async () => {
       const id = b.getAttribute("data-id");
       confirmDialog("删除这条社区提示词？", "删除后无法恢复，草稿和已公开内容都会一并移除。", async () => {
         await LLM.communityDelete(id);
-        load();
+        reload();
       });
     }));
     wrap.querySelectorAll(".cm-takedown").forEach(b => b.addEventListener("click", async () => {
@@ -1986,14 +1988,14 @@ import { LLM } from "./llm.js";
         await LLM.communityTakedown(id, "被举报下架");
         if (rid) { try { await LLM.communityReportResolve(rid, "resolved"); } catch (e) {} }
         toast("已下架并处理");
-        load();
+        reload();
       });
     }));
     wrap.querySelectorAll(".cm-dismiss").forEach(b => b.addEventListener("click", async () => {
       const rid = b.getAttribute("data-rid");
       try { await LLM.communityReportResolve(rid, "dismissed"); } catch (e) {}
       toast("已忽略该举报");
-      load();
+      reload();
     }));
   }
 
@@ -2092,7 +2094,7 @@ import { LLM } from "./llm.js";
 
     cLoadRate(row);
     document.querySelectorAll("#cm-rate-stars .star").forEach(s => s.addEventListener("click", () => cRate(row, Number(s.getAttribute("data-n")))));
-    const cloneBtn = document.getElementById("cm-clone");
+    const cloneBtn = (document.getElementById("cm-clone") as HTMLButtonElement);
     if (cloneBtn) cloneBtn.addEventListener("click", () => {
       const tpl = {
         slug: "mine-" + Date.now().toString(36),
@@ -2110,8 +2112,8 @@ import { LLM } from "./llm.js";
       toast("✓ 已克隆到「我的模板」");
       location.hash = "#/my";
     });
-    const favBtn = document.getElementById("cm-fav");
-    const reportBtn = document.getElementById("cm-report");
+    const favBtn = (document.getElementById("cm-fav") as HTMLButtonElement);
+    const reportBtn = (document.getElementById("cm-report") as HTMLButtonElement);
     if (reportBtn) reportBtn.addEventListener("click", () => reportDialog(row.id, row.title));
     let faved = Store.hasCommunityFav(row.id);
     const renderFav = () => {
@@ -2131,28 +2133,28 @@ import { LLM } from "./llm.js";
     cState = { msgs: [], ctl: null };
     cCurrentPrompt = row.prompt;
     refineCtx = communityRefineCtx();
-    const testOpen = document.getElementById("cm-test-open");
+    const testOpen = (document.getElementById("cm-test-open") as HTMLButtonElement);
     if (testOpen) testOpen.addEventListener("click", () => {
-      const w = document.getElementById("cm-test-wrap");
+      const w = (document.getElementById("cm-test-wrap") as HTMLElement);
       if (w) w.style.display = "block";
-      const log = document.getElementById("cm-test-log");
+      const log = (document.getElementById("cm-test-log") as HTMLElement);
       if (log && !log.children.length) log.innerHTML = '<div class="test-empty muted">对话已开始 —— 输入问题，模型会按上面的提示词作答。</div>';
-      const inp = document.getElementById("cm-test-input");
+      const inp = (document.getElementById("cm-test-input") as HTMLTextAreaElement);
       if (inp) inp.focus();
       LLM.communityUse(row.id, 1).catch(() => {});
     });
-    const sendBtn = document.getElementById("cm-test-send");
+    const sendBtn = (document.getElementById("cm-test-send") as HTMLButtonElement);
     if (sendBtn) sendBtn.addEventListener("click", () => cSend(cState));
-    const clearBtn = document.getElementById("cm-test-clear");
+    const clearBtn = (document.getElementById("cm-test-clear") as HTMLButtonElement);
     if (clearBtn) clearBtn.addEventListener("click", () => cClear(cState));
-    const input = document.getElementById("cm-test-input");
+    const input = (document.getElementById("cm-test-input") as HTMLTextAreaElement);
     if (input) input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cSend(cState); } });
     // F5 改写（社区版）：与模板详情页共用同一套 refine 逻辑，靠 refineCtx 区分
-    const cRefineOpen = document.getElementById("cm-refine-open");
+    const cRefineOpen = (document.getElementById("cm-refine-open") as HTMLButtonElement);
     if (cRefineOpen) cRefineOpen.addEventListener("click", openRefineBox);
-    const cRefineGo = document.getElementById("cm-refine-go");
+    const cRefineGo = (document.getElementById("cm-refine-go") as HTMLButtonElement);
     if (cRefineGo) cRefineGo.addEventListener("click", handleRefine);
-    const cRefineCancel = document.getElementById("cm-refine-cancel");
+    const cRefineCancel = (document.getElementById("cm-refine-cancel") as HTMLButtonElement);
     if (cRefineCancel) cRefineCancel.addEventListener("click", closeRefineBox);
   }
 
@@ -2168,11 +2170,11 @@ import { LLM } from "./llm.js";
     log.scrollTop = log.scrollHeight;
   }
   function cSend(state) {
-    const input = document.getElementById("cm-test-input");
-    const log = document.getElementById("cm-test-log");
-    const m = document.getElementById("cm-msg");
-    const sendBtn = document.getElementById("cm-test-send");
-    const usageEl = document.getElementById("cm-test-usage");
+    const input = (document.getElementById("cm-test-input") as HTMLTextAreaElement);
+    const log = (document.getElementById("cm-test-log") as HTMLElement);
+    const m = (document.getElementById("cm-msg") as HTMLElement);
+    const sendBtn = (document.getElementById("cm-test-send") as HTMLButtonElement);
+    const usageEl = (document.getElementById("cm-test-usage") as HTMLElement);
     if (!input || !log) return;
     const text = input.value.trim();
     if (!text) return;
@@ -2213,19 +2215,19 @@ import { LLM } from "./llm.js";
   }
   function cClear(state) {
     state.msgs = [];
-    const log = document.getElementById("cm-test-log");
+    const log = (document.getElementById("cm-test-log") as HTMLElement);
     if (log) log.innerHTML = '<div class="test-empty muted">对话已清空 —— 重新输入问题开始测试。</div>';
-    const usageEl = document.getElementById("cm-test-usage");
+    const usageEl = (document.getElementById("cm-test-usage") as HTMLElement);
     if (usageEl) usageEl.textContent = "";
   }
   function highlightStarsC(id) {
-    const stars = document.getElementById("cm-rate-stars");
+    const stars = (document.getElementById("cm-rate-stars") as HTMLElement);
     if (!stars) return;
     const my = Store.getRating(id) || 0;
     stars.querySelectorAll(".star").forEach(s => s.classList.toggle("on", Number(s.getAttribute("data-n")) <= my));
   }
   function cLoadRate(row) {
-    const info = document.getElementById("cm-rate-info");
+    const info = (document.getElementById("cm-rate-info") as HTMLElement);
     if (!info) return;
     highlightStarsC(row.id);
     const my = Store.getRating(row.id);
@@ -2235,12 +2237,12 @@ import { LLM } from "./llm.js";
     const prev = Store.getRating(row.id);
     LLM.communityRate(row.id, score, prev).then(r => {
       Store.setRating(row.id, score);
-      const info = document.getElementById("cm-rate-info");
+      const info = (document.getElementById("cm-rate-info") as HTMLElement);
       if (info) info.textContent = `当前均分 ${r.avgRating} 星 · ${r.ratingCount || 0} 人评分 · 你给了 ${score} 星`;
       highlightStarsC(row.id);
-      const m = document.getElementById("cm-msg");
+      const m = (document.getElementById("cm-msg") as HTMLElement);
       if (m) { m.textContent = "已评分 " + score + " 星 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); }
-    }).catch(e => { const m = document.getElementById("cm-msg"); if (m) m.textContent = "评分失败：" + e.message; });
+    }).catch(e => { const m = (document.getElementById("cm-msg") as HTMLElement); if (m) m.textContent = "评分失败：" + e.message; });
   }
 
   // ---------- 本地可观测（M18） ----------
@@ -2263,18 +2265,18 @@ import { LLM } from "./llm.js";
       <div id="tr-wrap" class="mt-4">加载中…</div>
     `;
     async function load() {
-      const wrap = document.getElementById("tr-wrap");
+      const wrap = (document.getElementById("tr-wrap") as HTMLElement);
       if (!wrap) return;
       wrap.innerHTML = "加载中…";
       try {
         const data = await LLM.fetchTraces(300);
-        const typeFilter = document.getElementById("tr-type").value;
+        const typeFilter = (document.getElementById("tr-type") as HTMLSelectElement).value;
         const traces = (data.traces || []).filter(t => !typeFilter || t.type === typeFilter);
         const total = traces.length;
         const errs = traces.filter(t => t.status === "error").length;
         const avgLat = total ? Math.round(traces.reduce((s, t) => s + (t.latencyMs || 0), 0) / total) : 0;
         const tok = traces.reduce((s, t) => s + (t.totalTokens || 0), 0);
-        const sum = document.getElementById("tr-summary");
+        const sum = (document.getElementById("tr-summary") as HTMLElement);
         if (sum) sum.innerHTML = [["总调用", total], ["错误", errs], ["平均延迟", (avgLat / 1000).toFixed(1) + "s"], ["累计 Token", tok]]
           .map((kv) => `<div class="pill" style="background:#f1f5f9;color:var(--slate);">${kv[0]}：<b>${kv[1]}</b></div>`).join("");
         if (!traces.length) { wrap.innerHTML = '<p class="muted">还没有任何调用记录。去生成或测试一条提示词，这里就会出现 trace。</p>'; return; }
@@ -2287,9 +2289,9 @@ import { LLM } from "./llm.js";
         wrap.innerHTML = '<p class="muted">加载失败：' + esc(e.message) + '</p>';
       }
     }
-    const refresh = document.getElementById("tr-refresh");
+    const refresh = (document.getElementById("tr-refresh") as HTMLButtonElement);
     if (refresh) refresh.addEventListener("click", load);
-    const typeSel = document.getElementById("tr-type");
+    const typeSel = (document.getElementById("tr-type") as HTMLSelectElement);
     if (typeSel) typeSel.addEventListener("change", load);
     load();
   }
@@ -2335,7 +2337,7 @@ import { LLM } from "./llm.js";
   }
 
   window.addEventListener("hashchange", route);
-  const navImport = document.getElementById("nav-import");
+  const navImport = (document.getElementById("nav-import") as HTMLElement);
   if (navImport) navImport.addEventListener("click", openImportFile);
   route();
 })();

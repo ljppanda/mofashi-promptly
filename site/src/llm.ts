@@ -101,7 +101,7 @@ export const LLM = (function () {
   }
 
   // 解析最终配置：若传入表单覆盖参数(over)且 provider 合法，则用之；否则回退已保存设置
-  function resolveCfg(over) {
+  function resolveCfg(over?) {
     if (over && over.provider && PROVIDERS[over.provider]) {
       const p = PROVIDERS[over.provider];
       const model = (over.customModel && over.customModel.trim()) || over.model || p.default;
@@ -110,20 +110,20 @@ export const LLM = (function () {
     return cfg();
   }
 
-  function effectiveLabel(over) {
+  function effectiveLabel(over?) {
     const c = resolveCfg(over);
     return c.providerLabel + " · " + c.model;
   }
 
   // 测试连接时也需要“当前生效”标签（可能基于未保存的表单）
-  function labelOf(over) {
+  function labelOf(over?) {
     const c = resolveCfg(over);
     return c.providerLabel + " · " + c.model;
   }
 
   // 统一请求入口：代理开关 ON 时把请求转发到本地/部署的代理（/relay），避免浏览器跨域、隐藏 Key
   // signal 用于流式中断（停止生成）
-  async function relayFetch(url, method, headers, body, signal) {
+  async function relayFetch(url, method, headers, body, signal?) {
     const s = Store.getSettings();
     const base = (s.proxyBase && String(s.proxyBase).trim()) ? String(s.proxyBase).trim().replace(/\/$/, "") : "";
     if (s.useProxy && base) {
@@ -154,7 +154,7 @@ export const LLM = (function () {
     };
   }
 
-  async function callChat(system, user, over) {
+  async function callChat(system, user, over?) {
     const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
 
@@ -310,7 +310,7 @@ export const LLM = (function () {
   }
 
   // 流式对话：逐 token 回调 onToken(chunk, isDone)；返回 {text, usage, elapsedMs}
-  async function callChatStream(system, user, onToken, over, signal) {
+  async function callChatStream(system, user, onToken, over?, signal?) {
     const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
     const start = Date.now();
@@ -493,7 +493,7 @@ export const LLM = (function () {
     if (dispatchErr) throw dispatchErr;
   }
 
-  function agentPayload(over) {
+  function agentPayload(over?) {
     const c = resolveCfg(over);
     const s = Store.getSettings();
     const useProxy = s.useProxy && (s.proxyBase && String(s.proxyBase).trim());
