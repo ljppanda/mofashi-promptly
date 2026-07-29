@@ -462,6 +462,48 @@ export const LLM = (function () {
     }
   }
 
+  // 实时拉取厂商在役模型列表（用于设置页「拉取真实模型列表」按钮）。
+  // 优先内存缓存 → localStorage 持久缓存；失败返回 null（调用方回退硬编码清单）。
+  // 文心(ernie)无公开 /models 列表，直接返回 null。其余走各厂商 list 接口：
+  //   - openai 风格：GET {base}/models → { data:[{id}] }
+  //   - claude：GET {base}/models（x-api-key 头）→ { data:[{id}] }
+  //   - gemini：GET {base}/models?key= → { models:[{name:"models/xxx"}] }
+  // 通过 relayFetch 复用代理开关（代理模式下走 /relay，避免跨域 / 隐藏 Key）。
+  const modelCache = new Map();
+  async function listModels(provider, key, secret) {
+    const p = PROVIDERS[provider];
+    if (!p || provider === "ernie") return null;
+    if (modelCache.has(provider)) return modelCache.get(provider);
+    const lsKey = "ppt_models_" + provider;
+    try { const c = JSON.parse(localStorage.getItem(lsKey) || "null"); if (Array.isArray(c) && c.length) { modelCache.set(provider, c); return c; } } catch (e) {}
+    let url, headers;
+    if (p.style === "gemini") {
+      url = p.base + "/models?key=" + encodeURIComponent(key || "");
+      headers = { "content-type": "application/json" };
+    } else if (p.style === "claude") {
+      url = p.base + "/models";
+      headers = { "x-api-key": key || "", "anthropic-version": "2023-06-01", "content-type": "application/json" };
+    } else {
+      url = p.base + "/models";
+      headers = { "authorization": "Bearer " + (key || ""), "content-type": "application/json" };
+    }
+    try {
+      const r = await relayFetch(url, "GET", headers, undefined);
+      if (!r.ok) return null;
+      const j = await r.json();
+      let ids = [];
+      if (p.style === "gemini") ids = (j.models || []).map(m => String(m.name || "").replace(/^models\//, "")).filter(Boolean);
+      else ids = (j.data || []).map(m => m.id).filter(Boolean);
+      ids = Array.from(new Set(ids));
+      if (!ids.length) return null;
+      modelCache.set(provider, ids);
+      try { localStorage.setItem(lsKey, JSON.stringify(ids)); } catch (e) {}
+      return ids;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ---------- 走服务端 Agent（/agent/*，带 RAG + 自审 + 流式）----------
   // 读取 Agent 的 SSE 事件流，逐事件回调 onEvent(name, data)；onEvent 抛错会在流结束后向上抛出
   async function readAgentSSE(r, onEvent, signal) {
@@ -766,5 +808,5 @@ export const LLM = (function () {
     return r.json();
   }
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
 })();

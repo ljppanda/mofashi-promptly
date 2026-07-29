@@ -13,7 +13,10 @@ export function openCompareModal(promptText: string, question?: string): void {
   const PROVIDERS: any = LLM.PROVIDERS;
   const modelRows = Object.keys(PROVIDERS).map(p => {
     const pdef = PROVIDERS[p];
-    const model = pdef.default;
+    // 用户自家 provider 优先用其在设置里实际配置（已验证可用）的模型，避免硬编码 default 过期
+    const model = (p === curProvider && (settings.customModel || settings.model))
+      ? (settings.customModel || settings.model)
+      : pdef.default;
     const checked = p === curProvider ? "checked" : "";
     const prefillKey = p === curProvider ? (settings.key || "") : "";
     const prefillSecret = p === curProvider ? (settings.secret || "") : "";

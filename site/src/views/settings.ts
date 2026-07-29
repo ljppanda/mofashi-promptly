@@ -26,9 +26,12 @@ export function settings(): void {
       <select id="set-provider" class="select" style="margin-bottom:16px;">${provOpts}</select>
 
       <label class="block text-sm font-medium mb-1" style="color:var(--slate)">具体模型</label>
-      <select id="set-model" class="select" style="margin-bottom:8px;"></select>
+      <div class="flex gap-2 items-center" style="margin-bottom:6px;">
+        <select id="set-model" class="select" style="flex:1;margin-bottom:0;"></select>
+        <button id="set-fetch-models" class="btn btn-ghost btn-sm" type="button" title="从厂商拉取当前在役模型列表">🔄 拉取真实列表</button>
+      </div>
       <input id="set-custom" class="input" style="margin-bottom:4px;" placeholder="或自定义模型名（留空则用上方所选）" value="${esc(s.customModel || "")}">
-      <p class="text-xs muted mb-4">选服务商会列出常用模型；也可去服务商控制台复制任意模型 ID 填到“自定义模型名”，完全自由。</p>
+      <p id="model-note" class="text-xs muted mb-4">选服务商会列出常用模型；点「🔄 拉取真实列表」可从厂商接口实时拉取在役模型（需填 Key），拉取失败时回退到内置清单。也可去控制台复制任意模型 ID 填到“自定义模型名”，完全自由。</p>
 
       <div id="secret-wrap" class="mb-4" style="display:none">
         <label class="block text-sm font-medium mb-1" style="color:var(--slate)">API Secret <span class="muted font-normal">（该服务商需要）</span></label>
@@ -59,10 +62,25 @@ export function settings(): void {
     <p class="text-xs muted mt-4">提示：部分国内模型需网络可直连；若不行，可开启上方代理模式。</p>
   `;
   const providerSel = (document.getElementById("set-provider") as HTMLSelectElement);
+  const modelSel = (document.getElementById("set-model") as HTMLSelectElement);
+  const modelNote = (document.getElementById("model-note") as HTMLElement);
+  const fetchBtn = (document.getElementById("set-fetch-models") as HTMLButtonElement);
   populateModels(providerSel.value);
+  // 切换服务商且有 Key 时，自动尝试拉取真实模型列表（无 Key 则保留内置清单）
   providerSel.addEventListener("change", e => {
     document.querySelectorAll("#secret-wrap ~ p.text-xs").forEach(n => n.remove());
-    populateModels((e.target as HTMLInputElement).value);
+    const p = (e.target as HTMLInputElement).value;
+    populateModels(p);
+    const k = (document.getElementById("set-key") as HTMLInputElement).value.trim();
+    if (k) refreshModels(p, k);
+  });
+  if (fetchBtn) fetchBtn.addEventListener("click", () => {
+    const p = providerSel.value;
+    const k = (document.getElementById("set-key") as HTMLInputElement).value.trim();
+    const sec = (document.getElementById("set-secret") as HTMLInputElement);
+    const secret = sec ? sec.value.trim() : "";
+    if (!k) { modelNote.textContent = "请先填写 API Key，再拉取真实模型列表。"; modelNote.className = "text-xs mb-4"; modelNote.style.color = "#b91c1c"; return; }
+    refreshModels(p, k, secret);
   });
   (document.getElementById("set-save") as HTMLButtonElement).addEventListener("click", () => {
     const provider = providerSel.value;
@@ -141,14 +159,43 @@ export function settings(): void {
 }
 
 // 根据所选服务商刷新“具体模型”下拉 + Secret 显隐 + 备注
-function populateModels(p: string): void {
+// liveModels：可选，实时拉取到的在役模型列表（优先于内置清单）
+function populateModels(p: string, liveModels?: string[] | null): void {
   const prov = LLM.PROVIDERS[p];
   const sel = (document.getElementById("set-model") as HTMLSelectElement);
   const s = Store.getSettings();
-  sel.innerHTML = (prov.models || []).map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
-  if (s.model && (prov.models || []).indexOf(s.model) !== -1) sel.value = s.model;
+  const list = (liveModels && liveModels.length) ? liveModels : (prov.models || []);
+  const prev = sel.value;
+  sel.innerHTML = list.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+  // 尽量保留用户原本选中的模型：在真实列表里就选中它，否则退回该厂商默认
+  if (prev && list.indexOf(prev) !== -1) sel.value = prev;
+  else if (s.model && list.indexOf(s.model) !== -1) sel.value = s.model;
+  else sel.value = prov.default;
   const wrap = (document.getElementById("secret-wrap") as HTMLElement);
   if (prov.needSecret) wrap.style.display = "block"; else wrap.style.display = "none";
   const note = prov.note ? `<p class="text-xs text-slate-400 mt-1">${esc(prov.note)}</p>` : "";
   wrap.insertAdjacentHTML("afterend", note);
+}
+
+// 从厂商接口实时拉取在役模型列表，成功后替换下拉框选项（失败回退内置清单）
+async function refreshModels(p: string, key: string, secret?: string): Promise<void> {
+  const btn = (document.getElementById("set-fetch-models") as HTMLButtonElement);
+  const note = (document.getElementById("model-note") as HTMLElement);
+  if (btn) { btn.disabled = true; btn.style.opacity = ".6"; btn.textContent = "拉取中…"; }
+  if (note) { note.textContent = "正在从 " + LLM.PROVIDERS[p].label + " 拉取在役模型列表…"; note.className = "text-xs muted mb-4"; note.style.color = ""; }
+  try {
+    const ids = await LLM.listModels(p, key, secret);
+    if (ids && ids.length) {
+      populateModels(p, ids);
+      if (note) { note.textContent = "✓ 已从 " + LLM.PROVIDERS[p].label + " 拉取 " + ids.length + " 个在役模型（已缓存，下次离线可用）。"; note.className = "text-xs mb-4"; note.style.color = "#15803d"; }
+    } else {
+      populateModels(p);
+      if (note) { note.textContent = "⚠ " + LLM.PROVIDERS[p].label + " 暂不支持实时拉取或无可用列表，已回退内置清单（可在“自定义模型名”手填）。"; note.className = "text-xs mb-4"; note.style.color = "#b45309"; }
+    }
+  } catch (e: any) {
+    populateModels(p);
+    if (note) { note.textContent = "✗ 拉取失败：" + (e && e.message ? e.message : e) + "，已回退内置清单。"; note.className = "text-xs mb-4"; note.style.color = "#b91c1c"; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = "1"; btn.textContent = "🔄 拉取真实列表"; }
+  }
 }

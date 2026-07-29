@@ -678,7 +678,7 @@ const server = http.createServer(async (req, res) => {
     if (!rlReg.ok) return sendJSON(res, 429, { error: "注册过于频繁，请稍后再试", retryAfter: rlReg.retryAfter });
   }
   // 转发代理：每分钟每 IP 最多 30 次，防止开放 relay 被刷爆
-  if (url.startsWith("/relay") && req.method === "POST") {
+  if (url.startsWith("/relay") && (req.method === "POST" || req.method === "GET")) {
     const rlRelay = rateLimit("relay:" + ip, Number(process.env.RL_RELAY_LIMIT ?? 30), Number(process.env.RL_RELAY_WINDOW ?? 60000));
     if (!rlRelay.ok) return sendJSON(res, 429, { error: "转发请求过于频繁，请稍后再试", retryAfter: rlRelay.retryAfter });
   }
@@ -712,7 +712,7 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 401, { error: "需要管理员权限" });
   }
 
-  if (url.startsWith("/relay") && req.method === "POST") return handleRelay(req, res);
+  if (url.startsWith("/relay") && (req.method === "POST" || req.method === "GET")) return handleRelay(req, res);
   if (url.startsWith("/agent/generate") && req.method === "POST") return handleAgentGenerate(req, res);
   if (url.startsWith("/agent/use") && req.method === "POST") return handleAgentUse(req, res);
   if (url.startsWith("/agent/clarify") && req.method === "POST") return handleAgentClarify(req, res);
