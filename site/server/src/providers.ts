@@ -4,6 +4,7 @@
 // 设计：绝大多数为 OpenAI 兼容；Claude / Gemini / 文心 走各自原生协议。
 
 import { LS_ENABLED, lsStart, lsEnd } from "./langsmith.js";
+import { recordProviderAttempt, recordFailover } from "./opmetrics.js";
 
 export type Style = "openai" | "claude" | "gemini" | "ernie";
 
@@ -78,6 +79,18 @@ export interface ChatOpts {
   signal?: AbortSignal;
   proxyBase?: string; // 用户若开启代理，服务端模型调用也走该代理的 /relay（避免服务端直连被墙导致 agent 失败回落）
   lsParentRunId?: string | null; // LangSmith：父 run id，每次模型调用会建一条子 run 上报
+  // —— 韧性（P1 收尾）——
+  maxRetries?: number;          // 覆盖默认重试次数（默认读 LLM_MAX_RETRIES，再默认 2）
+  fallback?: FallbackSpec[];    // 主 provider 用尽重试仍失败时的主备切换列表（单发，不级联重试）
+}
+
+// 主备切换规格：主 provider 失败后，按顺序尝试这些 provider 完成本次生成。
+// 通常由环境变量 LLM_FALLBACK_PROVIDERS 解析而来（服务端持有备用 Key），也可由调用方显式传入。
+export interface FallbackSpec {
+  provider: string;
+  model: string;
+  apiKey?: string;
+  apiSecret?: string;
 }
 
 export interface ChatResult {
@@ -264,14 +277,71 @@ async function streamErnie(p: ProviderDef, model: string, key: string, secret: s
   return { text, usage: normUsage(usage), elapsedMs: 0 };
 }
 
-export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
+// ---------- 韧性：错误分类 / 重试退避 / 主备切换 ----------
+
+// 从错误信息里解析上游 HTTP 状态码（stream* 抛出的错误形如 `[标签] 500 ...`）。
+function statusOf(err: unknown): number | null {
+  const m = /\[(\d{3})\]/.exec(String((err as any)?.message ?? err));
+  return m ? Number(m[1]) : null;
+}
+
+// 判断错误是否值得重试：超时/网络故障/限流(429)/5xx 可重试；4xx 鉴权或参数错误不可重试。
+function isRetryable(err: unknown): boolean {
+  if (!err) return false;
+  const e = err as any;
+  if (e?.name === "AbortError") return true; // 客户端超时
+  const msg = String(e?.message ?? e);
+  if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|ECONNRESET|network|socket|aborted|timeout|undici/i.test(msg)) return true;
+  const s = statusOf(err);
+  if (s != null) return [408, 409, 425, 429, 500, 502, 503, 504].includes(s);
+  return false; // 未知错误默认不重试（保守，避免对不可恢复错误空转）
+}
+
+export interface RetryOpts { maxRetries?: number; baseMs?: number; maxMs?: number; }
+
+// 指数退避重试（带抖动），仅对可重试错误生效；达到上限或遇不可重试错误立即抛出。
+export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOpts = {}): Promise<T> {
+  const maxRetries = opts.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  const baseMs = opts.baseMs ?? Number(process.env.LLM_RETRY_BASE_MS ?? 400);
+  const maxMs = opts.maxMs ?? Number(process.env.LLM_RETRY_MAX_MS ?? 8000);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= maxRetries || !isRetryable(err)) throw err;
+      const backoff = Math.min(maxMs, baseMs * 2 ** attempt);
+      const jitter = Math.random() * backoff * 0.3;
+      const wait = Math.round(backoff + jitter);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  throw lastErr;
+}
+
+// 由环境变量解析主备 provider 列表（服务端持有备用 Key 时启用）。
+// 例：LLM_FALLBACK_PROVIDERS="openrouter:openai/gpt-4o,deepseek:deepseek-chat" + LLM_FALLBACK_API_KEY=sk-xxx
+export function resolveFallbacks(): FallbackSpec[] {
+  const raw = (process.env.LLM_FALLBACK_PROVIDERS ?? "").trim();
+  if (!raw) return [];
+  const key = process.env.LLM_FALLBACK_API_KEY;
+  const secret = process.env.LLM_FALLBACK_API_SECRET;
+  if (!key) return []; // 没有备用 Key 则不成主备
+  return raw.split(",").map((s) => s.trim()).filter(Boolean).map((spec) => {
+    const idx = spec.indexOf(":");
+    if (idx < 0) return { provider: spec, model: "", apiKey: key, apiSecret: secret };
+    return { provider: spec.slice(0, idx), model: spec.slice(idx + 1), apiKey: key, apiSecret: secret };
+  });
+}
+
+// 单次模型调用（不含重试/主备，不含指标）：保留原 chatStream 的超时 + LangSmith + 协议分发逻辑。
+async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
   const p = providerOf(opts.provider);
   const t0 = Date.now();
-  // LangSmith：若父 run 存在，为本次模型调用建一条子 run（无 Key 时静默跳过）
   const childId = (LS_ENABLED && opts.lsParentRunId)
     ? await lsStart(`${p.label}·${opts.model}`, "llm", { provider: opts.provider, model: opts.model }, opts.lsParentRunId, { model: opts.model })
     : null;
-  // 客户端超时：避免上游供应商不可达时请求无限挂起（用户中断 signal 仍然优先）
   const ctrl = new AbortController();
   const TIMEOUT_MS = 90_000;
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -296,9 +366,50 @@ export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
     clearTimeout(timer);
   }
   res.elapsedMs = Date.now() - t0;
-  // 结子 run：记录产出与 token 用量
   await lsEnd(childId, { outputs: { text: res.text, usage: res.usage }, metadata: { elapsedMs: res.elapsedMs } });
   return res;
+}
+
+export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
+  const t0 = Date.now();
+  const maxRetries = opts.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  let primaryErr: unknown = null;
+  // 主 provider：指数退避重试（仅可重试错误）
+  try {
+    const res = await withRetry(() => chatPrimary(opts), { maxRetries });
+    recordProviderAttempt(opts.provider, opts.model, true, res.elapsedMs);
+    return res;
+  } catch (err) {
+    primaryErr = err;
+    recordProviderAttempt(opts.provider, opts.model, false, Date.now() - t0, String((err as any)?.message ?? err));
+  }
+  // 主 provider 失败 → 主备切换（每个备 provider 单发，不级联重试，避免长级联拖垮延迟）
+  const fallbacks = (opts.fallback && opts.fallback.length)
+    ? opts.fallback
+    : resolveFallbacks();
+  for (const fb of fallbacks) {
+    if (!fb.provider || !fb.apiKey) continue;
+    const fbOpts: ChatOpts = {
+      ...opts,
+      provider: fb.provider,
+      model: fb.model || opts.model,
+      apiKey: fb.apiKey,
+      apiSecret: fb.apiSecret,
+      fallback: [], // 防止备 provider 再触发嵌套主备
+    };
+    const ft0 = Date.now();
+    try {
+      const r = await chatPrimary(fbOpts);
+      recordProviderAttempt(fb.provider, fbOpts.model, true, r.elapsedMs);
+      recordFailover(true);
+      return r;
+    } catch (fbErr) {
+      recordProviderAttempt(fb.provider, fbOpts.model, false, Date.now() - ft0, String((fbErr as any)?.message ?? fbErr));
+    }
+  }
+  if (fallbacks.length) recordFailover(false);
+  // 对外仍抛出主 provider 的原始错误（保留 [status] 语义，调用方照旧处理）
+  throw primaryErr;
 }
 
 export function labelOf(id: string, model: string): string {

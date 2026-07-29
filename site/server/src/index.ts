@@ -28,6 +28,8 @@ import { assertRelayTarget } from "./ssrf.js";
 import { checkLengths, validateCommunityDraft, LIMITS } from "./validate.js";
 import { rateLimit, clientIp } from "./ratelimit.js";
 import { log } from "./logger.js";
+import { snapshot, recordGeneration } from "./opmetrics.js";
+import { reportError } from "./sentry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 静态根：优先使用 Vite 生产构建产物（dist/）；未构建时回退到源码根（仅便于未打包时仍跑得起来，但 TS 模块不会被转译，需走 vite dev）。
@@ -242,11 +244,12 @@ async function handleAgentGenerate(req: http.IncomingMessage, res: http.ServerRe
   const t0 = Date.now();
   try {
     await runAgent(
-      { provider, model, apiKey, apiSecret, industry: industry ?? "其他", sentence, proxyBase: proxyBase ?? undefined },
+      { provider, model, apiKey, apiSecret, industry: industry ?? "其他", sentence, proxyBase: proxyBase ?? undefined, promptVersions: payload.promptVersions },
       events, ac.signal,
     );
   } finally {
     recordTrace({ type: "生成模板", provider, model, preview: sentence, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordGeneration(!tacc.error);
   }
   res.end();
 }
@@ -285,11 +288,12 @@ async function handleAgentUse(req: http.IncomingMessage, res: http.ServerRespons
   const t0 = Date.now();
   try {
     await runAgentUse(
-      { provider, model, apiKey, apiSecret, industry: industry ?? template.industry ?? "其他", template, goal, proxyBase: proxyBase ?? undefined },
+      { provider, model, apiKey, apiSecret, industry: industry ?? template.industry ?? "其他", template, goal, proxyBase: proxyBase ?? undefined, promptVersions: payload.promptVersions },
       events, ac.signal,
     );
   } finally {
     recordTrace({ type: "生成提示词", provider, model, preview: goal, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordGeneration(!tacc.error);
   }
   res.end();
 }
@@ -326,7 +330,7 @@ async function handleAgentClarify(req: http.IncomingMessage, res: http.ServerRes
   const t0 = Date.now();
   try {
     await runAgentClarify(
-      { provider, model, apiKey, apiSecret, industry: template.industry ?? "其他", template, goal, history: Array.isArray(history) ? history : [], proxyBase: proxyBase ?? undefined },
+      { provider, model, apiKey, apiSecret, industry: template.industry ?? "其他", template, goal, history: Array.isArray(history) ? history : [], proxyBase: proxyBase ?? undefined, promptVersions: payload.promptVersions },
       events, ac.signal,
     );
   } catch (err) {
@@ -372,13 +376,14 @@ async function handleAgentRefine(req: http.IncomingMessage, res: http.ServerResp
   const t0 = Date.now();
   try {
     await runAgentRefine(
-      { provider, model, apiKey, apiSecret, prompt, feedback, conversation: Array.isArray(conversation) ? conversation : [], proxyBase: proxyBase ?? undefined },
+      { provider, model, apiKey, apiSecret, prompt, feedback, conversation: Array.isArray(conversation) ? conversation : [], proxyBase: proxyBase ?? undefined, promptVersions: payload.promptVersions },
       events, ac.signal,
     );
   } catch (err) {
     ev("error", { message: err instanceof Error ? err.message : String(err) });
   } finally {
     recordTrace({ type: "改写提示词", provider, model, preview: feedback, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordGeneration(!tacc.error);
   }
   ev("done", {});
   res.end();
@@ -595,6 +600,11 @@ async function handleTraces(req: http.IncomingMessage, res: http.ServerResponse)
   sendJSON(res, 200, { traces: listTraces(limit) });
 }
 
+// 运营指标（仅管理员可见）：多 LLM 服务健康度（成功率/延迟）、整体生成成功率、RAG 命中率、主备切换情况。
+async function handleOpsMetrics(_req: http.IncomingMessage, res: http.ServerResponse) {
+  sendJSON(res, 200, snapshot());
+}
+
 // 健康检查（供 Docker/K8s/编排探活）——无副作用、不依赖外部资源
 function handleHealthz(_req: http.IncomingMessage, res: http.ServerResponse) {
   sendJSON(res, 200, { ok: true, ts: Date.now() });
@@ -650,6 +660,10 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/community/moderation") && req.method === "GET" && !verifyAdminToken(req)) {
     return sendJSON(res, 401, { error: "需要管理员权限" });
   }
+  // 运营指标：含各 provider 健康度与失败详情，仅管理员可见
+  if (url.startsWith("/ops/metrics") && req.method === "GET" && !verifyAdminToken(req)) {
+    return sendJSON(res, 401, { error: "需要管理员权限" });
+  }
 
   if (url.startsWith("/relay") && req.method === "POST") return handleRelay(req, res);
   if (url.startsWith("/agent/generate") && req.method === "POST") return handleAgentGenerate(req, res);
@@ -678,6 +692,7 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/community/report") && req.method === "POST") return handleCommunityReport(req, res);
   if (url.startsWith("/community/takedown") && req.method === "POST") return handleCommunityTakedown(req, res);
   if (url.startsWith("/traces") && req.method === "GET") return handleTraces(req, res);
+  if (url.startsWith("/ops/metrics") && req.method === "GET") return handleOpsMetrics(req, res);
   return serveStatic(req, res);
 });
 
@@ -699,10 +714,12 @@ process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("uncaughtException", (err) => {
   log.error("未捕获异常", { message: (err as Error)?.message, stack: (err as Error)?.stack });
+  reportError(err); // 可选：配置 SENTRY_DSN 时上报
   shutdown("uncaughtException");
 });
 process.on("unhandledRejection", (reason) => {
   log.error("未处理的 Promise 拒绝", { reason: String(reason) });
+  reportError(reason);
   // 不退出：保持可用，仅记录
 });
 

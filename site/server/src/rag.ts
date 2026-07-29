@@ -23,6 +23,7 @@ import {
 } from "llamaindex";
 import { DynamicTool } from "@langchain/core/tools";
 import { listCommunity } from "./db.js";
+import { recordRag } from "./opmetrics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CORPUS = path.resolve(__dirname, "..", "data", "templates.json");
@@ -528,9 +529,11 @@ export async function retrieve(
         "）中高质量范例，借鉴其「角色 + 上下文/背景 + 任务与约束 + 输出格式」四段式，但不要照抄：\n\n" +
         blocks.join("\n\n")
       : "";
+    recordRag(1, refs.length > 0 ? 1 : 0); // 运营指标：检索命中率
     return { context, refs, snippet };
   } catch (e) {
     console.error("[rag] retrieve 失败，回退空上下文：", e);
+    recordRag(1, 0);
     return empty;
   }
 }

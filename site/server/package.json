@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "serve": "node dist/index.js",
     "verify:rag": "tsx scripts/verify_semantic_rag.ts",
+    "backup": "node scripts/backup.mjs",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

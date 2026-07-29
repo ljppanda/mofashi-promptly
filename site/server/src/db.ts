@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runMigrations } from "./migrations.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, "..", "data");
@@ -23,15 +24,8 @@ const db = new DatabaseSync(FILE);
 // 备份时需连同这两个文件一起拷，否则会丢最近事务。
 db.exec("PRAGMA journal_mode=WAL");
 db.exec("PRAGMA busy_timeout=5000");
-db.exec(`CREATE TABLE IF NOT EXISTS metrics(
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL DEFAULT '',
-  industry TEXT NOT NULL DEFAULT '其他',
-  uses INTEGER NOT NULL DEFAULT 0,
-  favorites INTEGER NOT NULL DEFAULT 0,
-  rating_sum INTEGER NOT NULL DEFAULT 0,
-  rating_count INTEGER NOT NULL DEFAULT 0
-)`);
+// 版本化 schema 迁移（基线 v1 见 migrations.ts）：确保后续改表结构安全、不破坏老库。
+runMigrations(db);
 
 export interface MetricEntry {
   title: string;
@@ -231,58 +225,8 @@ export function board(sort: BoardSort = "heat", limit = 100): BoardRow[] {
 // =====================================================================
 // 社区分享（M18）：用户发布 + 软审核（草稿 → 自己点公开 → 社区广场）
 // 状态：draft（待公开） | published（社区广场可见）
+// 社区 / 用户 / 举报 / 审核日志 等表结构由 migrations.ts 的基线 v1 创建，此处不再内联。
 // =====================================================================
-db.exec(`CREATE TABLE IF NOT EXISTS community(
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL DEFAULT '',
-  industry TEXT NOT NULL DEFAULT '其他',
-  author TEXT NOT NULL DEFAULT '匿名',
-  prompt TEXT NOT NULL DEFAULT '',
-  tags TEXT NOT NULL DEFAULT '[]',
-  note TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'draft',
-  created_at INTEGER NOT NULL,
-  published_at INTEGER,
-  uses INTEGER NOT NULL DEFAULT 0,
-  favorites INTEGER NOT NULL DEFAULT 0,
-  rating_sum INTEGER NOT NULL DEFAULT 0,
-  rating_count INTEGER NOT NULL DEFAULT 0
-)`);
-// 多用户账号（真实账号体系）：普通用户可注册/登录；admin 角色拥有管理权限。
-// 超级管理员仍可由 APP_ADMIN_PASSPHRASE 口令登录（auth.ts 中以虚拟 id 'admin' 表示）。
-db.exec(`CREATE TABLE IF NOT EXISTS users(
-  id TEXT PRIMARY KEY,
-  username TEXT UNIQUE NOT NULL,
-  pass_hash TEXT NOT NULL,
-  salt TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'user',
-  created_at INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active'
-)`);
-// 兼容旧库：给 community 补 author_id 列（绑定发布者，杜绝作者名伪造 + 支持「我的发布」按用户过滤）
-try { db.exec("ALTER TABLE community ADD COLUMN author_id TEXT"); } catch { /* 已存在则忽略 */ }
-
-// 用户举报（社区广场已公开内容可被举报，管理员在审核台处理）
-db.exec(`CREATE TABLE IF NOT EXISTS reports(
-  id TEXT PRIMARY KEY,
-  item_id TEXT NOT NULL,
-  reason TEXT NOT NULL DEFAULT '',
-  detail TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending'   -- pending(待处理) | resolved(已下架) | dismissed(已忽略)
-)`);
-
-// 审核日志（AI 软审核 / 管理员下架的动作留痕，供审核台「审核日志」查看）
-db.exec(`CREATE TABLE IF NOT EXISTS moderation_log(
-  id TEXT PRIMARY KEY,
-  item_id TEXT,
-  item_title TEXT NOT NULL DEFAULT '',
-  action TEXT NOT NULL,                    -- publish_draft | publish_public | publish_blocked | takedown
-  safe INTEGER NOT NULL DEFAULT 1,
-  engine TEXT,
-  reasons TEXT NOT NULL DEFAULT '[]',
-  created_at INTEGER NOT NULL
-)`);
 
 export interface CommunityRow {
   id: string;
@@ -531,22 +475,8 @@ export function listModerationLog(limit = 50): ModerationLogRow[] {
 // =====================================================================
 // 本地可观测（M18）：把每次 Agent 调用的 trace 落盘，应用内「可观测」页可见。
 // 与 LangSmith 云端上报互不冲突：LangSmith 走 langsmith.ts（需设 Key），这里走本地表。
+// traces 表由 migrations.ts 基线 v1 创建。
 // =====================================================================
-db.exec(`CREATE TABLE IF NOT EXISTS traces(
-  id TEXT PRIMARY KEY,
-  created_at INTEGER NOT NULL,
-  type TEXT NOT NULL,
-  provider TEXT,
-  model TEXT,
-  preview TEXT,
-  latency_ms INTEGER,
-  prompt_tokens INTEGER,
-  completion_tokens INTEGER,
-  total_tokens INTEGER,
-  status TEXT,
-  error TEXT,
-  steps TEXT
-)`);
 
 export interface TraceEntry {
   id: string;

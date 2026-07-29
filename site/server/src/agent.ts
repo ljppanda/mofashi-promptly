@@ -7,6 +7,7 @@ import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { chatStream, providerOf, chatWithTools, type Usage } from "./providers.js";
 import { retrieve, retrieveToolSpec, type RagRef, type RagResult } from "./rag.js";
 import { withTrace, lsEnd } from "./langsmith.js";
+import { getPrompt } from "./prompts.js";
 
 export interface AgentInput {
   provider: string;
@@ -17,6 +18,7 @@ export interface AgentInput {
   sentence: string;
   proxyBase?: string;
   lsParentRunId?: string | null;
+  promptVersions?: Record<string, number>; // 可选：锁定各 prompt 的版本（见 prompts.ts）
 }
 
 export interface TemplateDraft {
@@ -84,36 +86,7 @@ const GraphState = Annotation.Root({
 });
 
 // ---------- prompts ----------
-const SYS_CLARIFY = `你是需求分析师。把用户一句模糊的「提示词模板需求」，提炼成一句结构化中文简述，明确【行业/场景】【交付物】【目标受众】【关键约束】。
-只输出这一句，不要解释、不要换行。`;
-
-const SYS_DRAFT = `你是一名资深的「提示词模板架构师」。
-你的任务是把用户的需求，转化为一个结构完整、可直接填空、填完即高质量的提示词模板（框架）。模板不是「最终提示词」，而是「可复用的填空骨架」。
-
-{{retrieved}}
-
-{{critique}}
-
-必须严格输出 JSON，结构如下：
-{
-  "title": "一句话模板名（中文，含动词，如：简历优化）",
-  "industry": "行业（与用户需求最匹配的行业）",
-  "task": "任务类型（如：写作辅助）",
-  "summary": "一句中文说明这个模板解决什么",
-  "tags": ["2-4 个中文标签"],
-  "variables": [
-    { "name": "英文变量名", "label": "中文填表标签", "type": "text|textarea|select|multiselect", "options": ["选项1","选项2"], "required": true, "placeholder": "示例提示" }
-  ],
-  "prompt": "模板正文，用 {{变量名}} 作占位；必须包含：角色（你是…）+ 上下文/背景 + 任务与约束 + 输出格式（步骤/表格/结构）。必要时给示例。"
-}
-
-要求：
-- 只输出 JSON，不要任何解释、不要 markdown 代码块围栏。
-- variables 里只放「用户特有、每次不同」的信息；通用结构写死在 prompt 里。
-- prompt 用 \\n 表示换行，整体可被 JSON 正确解析。
-- 变量 name 用蛇形英文，label 用大白话中文（普通用户也能懂）。
-- 行业必须从以下选一：${INDUSTRIES.join("/")}。`;
-
+// 所有 Agent 提示词已集中到 prompts.ts（带版本号，支持按请求锁定/回滚）。此处不再内联。
 // ---------- 工具 ----------
 // 从模型文本里抽取第一个 JSON 对象（兼容 ```json 围栏、前后多余文本）
 function parseJsonObject(text: string): any {
@@ -162,22 +135,21 @@ function ruleValidate(draft: TemplateDraft | null, industry: string): { passes: 
 type NodeFn = (s: AgentState) => Promise<Partial<AgentState>>;
 
 function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal) {
+  const pv = input.promptVersions;
   const clarify: NodeFn = async (s) => {
     events.onNode?.("clarify");
     const res = await chatStream({
       provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
       proxyBase: input.proxyBase,
       lsParentRunId: input.lsParentRunId,
-      system: SYS_CLARIFY, user: `行业倾向：${s.industry}\n需求：${s.sentence}`, signal,
+      system: getPrompt("clarify", pv?.clarify), user: `行业倾向：${s.industry}\n需求：${s.sentence}`, signal,
     });
     events.onUsage?.(res.usage);
     return { clarification: res.text.trim() };
   };
 
   // 检索：优先让 LLM 通过 retrieveTool 自主决策（openai 兼容系）；否则兜底直查，保证 context 永不空
-  const SYS_RETRIEVE_TOOL =
-    "你是模板架构师的检索决策助手。当用户起草提示词模板时，判断是否需要从模板库检索相似范例。" +
-    "绝大多数情况都应检索以借鉴「角色 + 背景 + 任务 + 格式」四段式结构。若决定检索，调用 retrieve_examples 工具并传入用户需求。";
+  const SYS_RETRIEVE_TOOL = getPrompt("retrieve_tool", pv?.retrieve_tool);
   async function runRetrieval(s: AgentState): Promise<RagResult> {
     const p = providerOf(input.provider);
     if (p.style !== "openai") return retrieve("", s.sentence, 4); // 非 openai 系无工具调用，直接兜底
@@ -206,7 +178,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
     events.onThink?.(`已从模板库检索到 ${rag.refs.length} 个相似范例，将借鉴其结构…`);
 
     events.onNode?.("draft");
-    const sysUser = SYS_DRAFT
+    const sysUser = getPrompt("draft", pv?.draft)
       .replace("{{retrieved}}", rag.context ? "下面是同行业的高质量结构范例（few-shot），请借鉴其「角色 + 上下文/背景 + 任务与约束 + 输出格式」四段式，但不要照抄：\n" + rag.context : "")
       .replace("{{critique}}", s.critique ? "上一版被自审打回，请重点修正以下意见：" + s.critique : "");
     const userMsg = `需求简述：${s.clarification || s.sentence}\n原始需求：${s.sentence}\n行业倾向：${s.industry}`;
@@ -330,6 +302,7 @@ export interface AgentUseInput {
     variables?: Array<{ name: string; label: string; type?: string; options?: string[] }>;
   };
   goal: string;
+  promptVersions?: Record<string, number>;
 }
 
 export interface AgentUseEvents {
@@ -341,14 +314,6 @@ export interface AgentUseEvents {
   onUsage?: (u: Usage) => void;
   onError?: (msg: string) => void;
 }
-
-const SYS_USE = `你是一名「提示词落地工程师」。用户选了一个提示词模板（一个可复用的"专家提示词生成器"），并给出自己的目标。你的任务是：基于该模板的专长与结构，写出一条【具体、可直接复制粘贴进任意 AI 助手】的成品提示词。
-
-要求：
-1. 严格遵循模板骨架的角色设定（"你是…"）与"上下文/背景 → 任务与约束 → 输出格式"的结构，但【不要把任何 {{占位}} 或"请填写"字样留给用户】。
-2. 根据"用户目标"，由你（模型）动态写出每个维度下的具体内容：构造有代入感的情境、列出该问的关键点与具体问题、必要时给出示例与边界。用户不需要自己填任何东西——这是模型在思考过程中完成的。
-3. 产出必须自包含、可直接使用；语气与模板定位一致（如法律顾问要专业、严谨、标注不确定性）。
-4. 只输出最终提示词正文，不要任何解释、不要 markdown 代码块围栏、不要在开头写"以下是…"。`;
 
 export async function runAgentUse(
   input: AgentUseInput,
@@ -369,7 +334,7 @@ export async function runAgentUse(
         .map((v) => "- " + v.label + (v.options && v.options.length ? `（可覆盖维度：${v.options.join("、")}）` : ""))
         .join("\n");
       const sys =
-        SYS_USE +
+        getPrompt("use", input.promptVersions?.use) +
         `\n\n【模板专长】\n标题：${input.template.title}\n行业：${input.template.industry}\n定位：${input.template.summary}\n标签：${(input.template.tags || []).join("、")}\n` +
         `\n【模板结构骨架（沿用其角色与四段式，把 {{占位}} 换成真实内容）】\n${input.template.prompt}\n` +
         (dims ? `\n【该模板要覆盖的维度（由你动态写具体）】\n${dims}\n` : "") +
@@ -411,18 +376,7 @@ export async function runAgentUse(
 // 每个问题给 2-4 个贴合领域的选项让用户点选（也允许自由补充），多轮直到信息足够，
 // 再把"目标 + 已确认问答"交给 runAgentUse 代写成品提示词。追问由模型动态生成，
 // 不是模板固定字段——与"模板不该让用户手填"的初衷一致。
-const SYS_CLARIFY_INTERVIEW = `你是一个「提示词需求访谈助手」。用户选了一个提示词模板（一个可复用的专家提示词生成器），并给出自己的目标。你的任务：判断要写出高质量、具体的成品提示词还缺哪些关键信息，并【像专家顾问一样主动追问】，让用户通过「点选选项」即可确认。
-
-访谈原则：
-- 站在模板的专长角度思考：要产出好提示词，最该搞清的是受众/对象、输出形式、语气风格、关键约束/边界、是否有示例或素材。
-- 每次最多提 3 个问题；每个问题给 2-4 个贴合该领域的具体选项（用户可直接点选）；同时允许自由补充文字。
-- 不要问历史里已经回答过的问题；不要问废话（如"还有什么要补充的吗"）。
-- 只有当信息已足够写出具体提示词时，才返回 complete:true，并给出整合了所有回答的 enrichedGoal（一句话清晰 brief，包含受众、形式、约束等关键决策）。
-
-只输出 JSON，不要任何解释、不要 markdown 围栏：
-{"complete": false, "questions":[{"id":"q1","question":"问题（中文）","options":["选项1","选项2","选项3"]}]}
-或
-{"complete": true, "enrichedGoal":"整合后的目标描述"}`;
+// 提示词已集中到 prompts.ts（访谈提示词在 runAgentClarify 中通过 getPrompt 调用）
 
 export interface ClarifyQuestion {
   id: string;
@@ -446,6 +400,7 @@ export interface AgentClarifyInput {
   };
   goal: string;
   history: Array<{ question: string; answer: string }>;
+  promptVersions?: Record<string, number>;
 }
 export interface AgentClarifyResult {
   complete: boolean;
@@ -485,7 +440,7 @@ export interface AgentClarifyEvents {
 // 通过 events 把"模型在想什么"流式推给前端，避免访谈阶段黑屏卡顿。
 export async function runAgentClarify(input: AgentClarifyInput, events?: AgentClarifyEvents, signal?: AbortSignal): Promise<AgentClarifyResult> {
   const historyText = (input.history || []).map((h, i) => `${i + 1}. ${h.question}\n   用户回答：${h.answer}`).join("\n");
-  const sys = SYS_CLARIFY_INTERVIEW
+  const sys = getPrompt("clarify_interview", input.promptVersions?.clarify_interview)
     + `\n\n【模板专长】\n标题：${input.template.title}\n行业：${input.template.industry}\n定位：${input.template.summary}\n标签：${(input.template.tags || []).join("、")}\n`
     + `\n【模板结构骨架】\n${input.template.prompt}`;
   const userMsg = `用户原始目标：${input.goal}\n\n已确认的问答历史：\n${historyText || "（无）"}\n\n请判断信息是否足够，并给出下一轮追问或判定完成（只输出 JSON）。`;
@@ -566,6 +521,7 @@ export interface AgentRefineInput {
   prompt: string;                 // 当前正在测试的提示词全文
   feedback: string;               // 用户不满意的点 / 希望改进的地方
   conversation?: Array<{ role: string; content: string }>; // 测试对话（可选，供模型理解实际表现）
+  promptVersions?: Record<string, number>;
 }
 export interface AgentRefineEvents {
   onNode?: (name: string) => void;
@@ -575,16 +531,6 @@ export interface AgentRefineEvents {
   onUsage?: (u: Usage) => void;
   onError?: (msg: string) => void;
 }
-
-const SYS_REFINE_ANALYZE = `你是一名「提示词体检医生」。用户已经写了一条提示词，并在实际测试（把这条提示词当作系统设定去对话）中发现了不满意的地方。请结合【原提示词】【用户反馈】【实际测试对话】，指出原提示词具体的、可操作的不足，给出 3-6 条改写要点（每条一句话，说明"哪里不足 + 该怎么改"）。只输出要点列表，不要改写提示词本身。`;
-
-const SYS_REFINE_REWRITE = `你是一名「提示词优化器」。根据用户指出的问题与改写要点，对提示词做【针对性改写】，输出改进后的【完整提示词全文】。
-
-改写原则：
-1. 保留原提示词中好的部分（角色设定、有用结构、有效约束），不要推倒重来。
-2. 针对用户的每条反馈逐一改进：如"回答太啰嗦"就加强"只输出要点、避免铺垫"；"没按格式输出"就强化输出格式并给示例；"没抓住重点"就明确任务优先级与目标；"语气不对"就调整角色语气设定。
-3. 改进要可操作、具体到措辞，而非空泛建议。
-4. 只输出改进后的【完整提示词正文】，不要任何解释、不要 markdown 代码块围栏、不要在开头写"以下是…"。`;
 
 function convToText(conv?: Array<{ role: string; content: string }>): string {
   if (!conv || !conv.length) return "";
@@ -604,7 +550,7 @@ export async function runAgentRefine(input: AgentRefineInput, events?: AgentRefi
   try {
     const aRes = await chatStream({
       provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
-      proxyBase: input.proxyBase, system: SYS_REFINE_ANALYZE, user: baseUser, signal,
+      proxyBase: input.proxyBase, system: getPrompt("refine_analyze", input.promptVersions?.refine_analyze), user: baseUser, signal,
     });
     events?.onUsage?.(aRes.usage);
     analysis = (aRes.text || "").trim();
@@ -616,7 +562,7 @@ export async function runAgentRefine(input: AgentRefineInput, events?: AgentRefi
   // ② 改写提示词（流式输出新版全文）
   events?.onNode?.("rewrite");
   events?.onThink?.("✍️ 根据分析要点，正在改写提示词…");
-  const sysRewrite = SYS_REFINE_REWRITE +
+  const sysRewrite = getPrompt("refine_rewrite", input.promptVersions?.refine_rewrite) +
     (analysis ? `\n\n【改写要点（已分析得出，请逐条落实）】\n${analysis}` : "");
   const res = await chatStream({
     provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
