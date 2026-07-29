@@ -43,3 +43,35 @@ export const STEP_HINT: Record<string, string> = {
 
 // 交互式访谈（F3）最多追问轮数
 export const MAX_CLARIFY_ROUNDS = 3;
+
+// 跨模型对比的成本估算表（单位：USD / 1M tokens，取各厂商公开价目近似，以实际账单为准）
+export const MODEL_PRICE: Record<string, { in: number; out: number }> = {
+  openai:    { in: 2.5,  out: 10 },
+  deepseek:  { in: 0.5,  out: 1.2 },
+  moonshot:  { in: 0.8,  out: 2.4 },
+  zhipu:     { in: 0.6,  out: 1.8 },
+  qwen:      { in: 0.8,  out: 2.4 },
+  doubao:    { in: 0.5,  out: 1.5 },
+  hunyuan:   { in: 0.5,  out: 1.5 },
+  baichuan:  { in: 0.6,  out: 1.8 },
+  yi:        { in: 0.5,  out: 1.5 },
+  grok:      { in: 3,    out: 15 },
+  mistral:   { in: 2,    out: 6 },
+  ollama:    { in: 0,    out: 0 },
+  openrouter:{ in: 3,    out: 12 },
+  groq:      { in: 0.5,  out: 1.5 },
+  perplexity:{ in: 1,    out: 1 },
+  together:  { in: 1.2,  out: 3.6 },
+  claude:    { in: 3,    out: 15 },
+  gemini:    { in: 1.2,  out: 4.8 },
+  ernie:     { in: 0.5,  out: 1.5 },
+};
+
+// 按 provider 估算一次调用的成本（美元）；usage 为归一化结构 {inputTokens, outputTokens, ...}
+export function estimateCost(provider: string, usage: any): number {
+  const p = MODEL_PRICE[provider];
+  if (!p) return 0;
+  const inT = (usage && usage.inputTokens) || 0;
+  const outT = (usage && usage.outputTokens) || 0;
+  return (inT / 1_000_000) * p.in + (outT / 1_000_000) * p.out;
+}

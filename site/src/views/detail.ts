@@ -3,11 +3,12 @@ import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";
-import { esc, setMeta, fmtUsage, metricBump, metricRate, toast } from "../core/ui.js";
+import { esc, setMeta, fmtUsage, metricBump, metricRate, toast, diffLines, fmtDateTime } from "../core/ui.js";
 import { GEN_STEPS_3, ALL_INDUSTRIES, MAX_CLARIFY_ROUNDS } from "../core/config.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
 import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "./refine.js";
 import { openPublishForm } from "./community.js";
+import { openCompareModal } from "./compare.js";
 
 // 模板稳定 id：优先 slug（内置/导入/生成），其次 id
 function tplId(t: any): string | null {
@@ -31,6 +32,7 @@ export function detail(slug: string): void {
   ctx.current = JSON.parse(JSON.stringify(tpl));
   ctx.testMessages = []; ctx.testController = null; // 进入新模板时清空测试沙盒对话
   const isMine = Store.hasMine(slug);
+  const canEdit = isMine || ctx.current.generated || ctx.current.imported || ctx.current.forkedFrom;
   setMeta(tpl.title, (tpl.summary || tpl.task || "").slice(0, 120));
   const tagHtml = (tpl.tags || []).map(t => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
   const industryOpts = ALL_INDUSTRIES.map(i =>
@@ -45,7 +47,8 @@ export function detail(slug: string): void {
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.7rem;">${esc(tpl.title)}</h1>
       <div class="muted" style="font-size:.85rem;margin-top:6px;"><span id="meta-industry">${esc(tpl.industry)}</span> · ${esc(tpl.task)}
-        ${tpl.generated ? '<span class="pill pill-amber" style="margin-left:4px;">AI 生成</span>' : ""}</div>
+        ${tpl.generated ? '<span class="pill pill-amber" style="margin-left:4px;">AI 生成</span>' : ""}
+        ${tpl.forkedFrom ? `<a href="#/c/${esc(tpl.forkedFrom)}" class="pill" style="margin-left:4px;background:#ede9fe;color:#6d28d9;text-decoration:none;">🍴 派生自社区「${esc(tpl.forkedFromTitle || "社区模板")}」</a>` : ""}</div>
       ${ctx.current._genUsage ? `<div class="mt-2 inline-flex items-center gap-1 text-xs" style="color:var(--slate);background:#f1f5f9;padding:4px 10px;border-radius:8px;">📊 模板生成：${esc(fmtUsage(ctx.current._genUsage, ctx.current._genElapsed || 0))}</div>` : ""}
     </div>
     <div class="flex flex-wrap items-center gap-2 mt-3">
@@ -63,8 +66,26 @@ export function detail(slug: string): void {
     </div>
 
     <div class="card tpl-card" style="margin-top:16px;">
-      <div class="ttl">📄 模板正文（可复用的「提示词骨架」）</div>
-      <pre class="code-box" style="margin-top:8px;white-space:pre-wrap;word-break:break-word;">${esc(tpl.prompt || "（此模板为通用专家提示词，无固定骨架，由模型在生成时动态撰写具体内容）")}</pre>
+      <div class="flex items-center justify-between">
+        <div class="ttl">📄 模板正文（可复用的「提示词骨架」）</div>
+        ${canEdit ? '<button id="edit-toggle" class="btn btn-ghost btn-sm">✏️ 编辑</button>' : ""}
+      </div>
+      <pre id="tpl-prompt-view" class="code-box" style="margin-top:8px;white-space:pre-wrap;word-break:break-word;">${esc(tpl.prompt || "（此模板为通用专家提示词，无固定骨架，由模型在生成时动态撰写具体内容）")}</pre>
+      <div id="edit-panel" style="display:none;margin-top:8px;">
+        <label class="text-sm font-medium" style="color:var(--slate)">标题</label>
+        <input id="ed-title" class="input" style="margin-top:4px;" value="${esc(tpl.title)}" />
+        <label class="text-sm font-medium" style="color:var(--slate);margin-top:8px;display:block;">简介</label>
+        <input id="ed-summary" class="input" style="margin-top:4px;" value="${esc(tpl.summary || "")}" />
+        <label class="text-sm font-medium" style="color:var(--slate);margin-top:8px;display:block;">所属分类</label>
+        <select id="ed-industry" class="select" style="margin-top:4px;width:100%;">${industryOpts}</select>
+        <label class="text-sm font-medium" style="color:var(--slate);margin-top:8px;display:block;">模板骨架（prompt）</label>
+        <textarea id="ed-prompt" class="input" rows="8" style="margin-top:4px;font-family:monospace;">${esc(tpl.prompt || "")}</textarea>
+        <div class="flex gap-2 mt-3 flex-wrap items-center">
+          <button id="ed-save" class="btn btn-primary btn-sm">💾 保存修改</button>
+          <button id="ed-cancel" class="btn btn-ghost btn-sm">取消</button>
+          <span id="ed-msg" class="muted" style="font-size:.75rem;"></span>
+        </div>
+      </div>
       <div class="muted" style="font-size:.78rem;margin-top:6px;">↑ 这是「可复用的模板骨架」（含 {{占位变量}}），本身不能直接发给 AI。在下方填入你的具体目标，即可把它填成一份可直接用的成品提示词。</div>
     </div>
 
@@ -84,6 +105,7 @@ export function detail(slug: string): void {
         <button id="use-btn" class="btn btn-primary">✨ 生成提示词</button>
         <button id="use-stop" class="btn btn-danger" style="display:none">■ 停止</button>
         <button id="save-btn" class="btn btn-ghost">${isMine ? "★ 已收藏" : "☆ 收藏到我的模板"}</button>
+        ${canEdit ? '<button id="hist-btn" class="btn btn-ghost btn-sm">🕑 历史版本</button>' : ""}
         <button id="dl-tpl-btn" class="btn btn-ghost btn-sm">下载此模板</button>
       </div>
       <div id="use-clarify" style="margin-top:14px;display:none;"></div>
@@ -105,6 +127,7 @@ export function detail(slug: string): void {
         <div class="ttl">🧪 测试这个提示词（把它当作系统设定，自由提问，多轮对话）</div>
         <div class="flex gap-2 items-center">
           <button id="refine-open" class="btn btn-ghost btn-sm">✏️ 不满意？让 AI 改进</button>
+          <button id="use-compare" class="btn btn-ghost btn-sm">🔬 跨模型对比</button>
           <button id="test-clear" class="btn btn-ghost btn-sm">清空对话</button>
         </div>
       </div>
@@ -195,6 +218,42 @@ export function detail(slug: string): void {
       rateTemplate(Number(s.getAttribute("data-n")));
     }));
   }
+  if (canEdit) {
+    const editToggle = (document.getElementById("edit-toggle") as HTMLButtonElement);
+    if (editToggle) editToggle.addEventListener("click", () => {
+      const panel = (document.getElementById("edit-panel") as HTMLElement);
+      const view = (document.getElementById("tpl-prompt-view") as HTMLElement);
+      if (panel && view) {
+        const open = panel.style.display === "none";
+        panel.style.display = open ? "block" : "none";
+        view.style.display = open ? "none" : "block";
+      }
+    });
+    const edSave = (document.getElementById("ed-save") as HTMLButtonElement);
+    if (edSave) edSave.addEventListener("click", () => {
+      ctx.current.title = (document.getElementById("ed-title") as HTMLInputElement).value.trim() || ctx.current.title;
+      ctx.current.summary = (document.getElementById("ed-summary") as HTMLInputElement).value.trim();
+      ctx.current.industry = (document.getElementById("ed-industry") as HTMLSelectElement).value;
+      ctx.current.prompt = (document.getElementById("ed-prompt") as HTMLTextAreaElement).value;
+      Store.addMine(JSON.parse(JSON.stringify(ctx.current)));
+      toast("✓ 已保存修改（已记录为新版本）");
+      detail(ctx.current.slug);
+    });
+    const edCancel = (document.getElementById("ed-cancel") as HTMLButtonElement);
+    if (edCancel) edCancel.addEventListener("click", () => {
+      const panel = (document.getElementById("edit-panel") as HTMLElement);
+      const view = (document.getElementById("tpl-prompt-view") as HTMLElement);
+      if (panel && view) { panel.style.display = "none"; view.style.display = "block"; }
+    });
+    const histBtn = (document.getElementById("hist-btn") as HTMLButtonElement);
+    if (histBtn) histBtn.addEventListener("click", openHistory);
+  }
+  const compareBtn = (document.getElementById("use-compare") as HTMLButtonElement);
+  if (compareBtn) compareBtn.addEventListener("click", () => {
+    if (!ctx.current._lastPrompt) { toast("请先生成成品提示词，再对比不同模型的表现。"); return; }
+    openCompareModal(ctx.current._lastPrompt, "请用 3 句话介绍你能帮我做什么，并各举一例。");
+  });
+
   loadRateInfo(tplId(ctx.current));
 }
 
@@ -609,6 +668,56 @@ function toggleSave(): void {
     (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
     metricBump(id, "favorite", 1, ctx.current.title, ctx.current.industry);
   }
+}
+
+function openHistory(): void {
+  const versions = ctx.current.versions || [];
+  if (!versions.length) { toast("暂无历史版本（编辑并保存模板后会自动留存版本）"); return; }
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  const listHtml = versions.map((v: any, i: number) => `
+    <div class="card tpl-card" style="margin-top:10px;padding:10px 12px;">
+      <div style="font-weight:600;">版本 #${versions.length - i} · ${esc(fmtDateTime(v.ts))}</div>
+      <div class="muted" style="font-size:.78rem;margin-top:4px;">${esc((v.snap.summary || "").slice(0, 70) || "(无简介)")} · ${(v.snap.variables || []).length} 个变量</div>
+      <div class="flex gap-2 mt-2 flex-wrap items-center">
+        <button class="btn btn-ghost btn-sm hist-view" data-i="${i}">查看差异</button>
+        <button class="btn btn-primary btn-sm hist-rollback" data-i="${i}">回滚到此版本</button>
+      </div>
+    </div>`).join("");
+  ov.innerHTML = `
+    <div class="modal-card card" style="max-width:680px;width:92%;max-height:88vh;overflow:auto;">
+      <div class="flex items-center justify-between">
+        <div class="ttl">🕑 历史版本（${versions.length}）</div>
+        <button id="hist-close" class="btn btn-ghost btn-sm">关闭</button>
+      </div>
+      <div id="hist-list" class="mt-3">${listHtml}</div>
+      <div id="hist-diff" style="margin-top:12px;display:none;"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener("click", (e) => { if ((e.target as HTMLElement).id === "hist-close" || e.target === ov) close(); });
+  ov.querySelectorAll(".hist-view").forEach(b => b.addEventListener("click", () => {
+    const v = versions[Number(b.getAttribute("data-i"))];
+    const box = ov.querySelector("#hist-diff") as HTMLElement;
+    box.style.display = "block";
+    box.innerHTML = `<div class="ttl">🔍 该版本 → 当前（<span style="color:#b91c1c;">红=删</span> / <span style="color:#15803d;">绿=增</span>）</div>
+      <pre class="code-box" style="margin-top:8px;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto;">${diffLines(v.snap.prompt || "", ctx.current.prompt || "")}</pre>`;
+    box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }));
+  ov.querySelectorAll(".hist-rollback").forEach(b => b.addEventListener("click", () => {
+    const v = versions[Number(b.getAttribute("data-i"))];
+    const s = v.snap;
+    ctx.current.title = s.title ?? ctx.current.title;
+    ctx.current.summary = s.summary ?? ctx.current.summary;
+    ctx.current.industry = s.industry ?? ctx.current.industry;
+    ctx.current.task = s.task ?? ctx.current.task;
+    ctx.current.prompt = s.prompt ?? ctx.current.prompt;
+    ctx.current.variables = s.variables ?? ctx.current.variables;
+    Store.addMine(JSON.parse(JSON.stringify(ctx.current)));
+    close();
+    toast("✓ 已回滚到该版本（并保存为新版本）");
+    detail(ctx.current.slug);
+  }));
 }
 
 // 导入模板逻辑已抽到 views/import.ts（openImportFile / normalizeImport / importTemplate），

@@ -80,3 +80,34 @@ export function setMeta(title: string, desc?: string): void {
   ensureMeta("property", "og:description", desc);
   ensureMeta("property", "og:type", "website");
 }
+
+// 时间戳格式化（版本历史等）
+export function fmtDateTime(ts: number): string {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// 行级文本差异（LCS），用于模板版本对比；返回已转义并带高亮样式的 HTML 片段（红删 / 绿增 / 灰同）
+export function diffLines(a: string, b: string): string {
+  const A = String(a == null ? "" : a).split("\n");
+  const B = String(b == null ? "" : b).split("\n");
+  const n = A.length, m = B.length;
+  if (n > 1500 || m > 1500) {
+    return `<span style="display:block;white-space:pre-wrap;color:#b91c1c;">- ${esc(a)}</span><span style="display:block;white-space:pre-wrap;color:#15803d;">+ ${esc(b)}</span>`;
+  }
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: string[] = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (A[i] === B[j]) { out.push(`<span style="display:block;white-space:pre-wrap;color:#475569;">  ${esc(A[i])}</span>`); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(`<span style="display:block;white-space:pre-wrap;color:#b91c1c;">- ${esc(A[i])}</span>`); i++; }
+    else { out.push(`<span style="display:block;white-space:pre-wrap;color:#15803d;">+ ${esc(B[j])}</span>`); j++; }
+  }
+  while (i < n) { out.push(`<span style="display:block;white-space:pre-wrap;color:#b91c1c;">- ${esc(A[i])}</span>`); i++; }
+  while (j < m) { out.push(`<span style="display:block;white-space:pre-wrap;color:#15803d;">+ ${esc(B[j])}</span>`); j++; }
+  return out.join("");
+}

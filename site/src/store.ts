@@ -22,7 +22,26 @@ export const Store = (function () {
     localStorage.setItem(K_MINE, JSON.stringify(arr));
   }
   function addMine(t) {
-    const arr = getMine().filter(x => x.slug !== t.slug);
+    const arr = getMine();
+    const idx = arr.findIndex(x => x.slug === t.slug);
+    if (idx >= 0) {
+      const old = arr[idx];
+      const snap = {
+        title: old.title, summary: old.summary, industry: old.industry, task: old.task,
+        prompt: old.prompt, variables: old.variables
+      };
+      const versions = (old.versions || []).slice();
+      const last = versions[0];
+      const same = last && JSON.stringify(last.snap) === JSON.stringify(snap);
+      if (!same) {
+        versions.unshift({ ts: Date.now(), snap });
+        if (versions.length > 30) versions.length = 30; // 限 30 版，防膨胀
+      }
+      t.versions = versions;
+      arr.splice(idx, 1);
+    } else {
+      t.versions = t.versions || [];
+    }
     arr.unshift(t);
     saveMine(arr);
     return arr;

@@ -368,7 +368,7 @@ export async function communityDetail(id: string): Promise<void> {
       <div id="cm-rate-info" class="muted" style="font-size:.78rem;margin-top:6px;">加载评分中…</div>
     </div>
     <div class="flex gap-2 mt-3 flex-wrap items-center">
-      <button id="cm-clone" class="btn btn-primary btn-sm">📥 克隆到我的模板</button>
+      <button id="cm-clone" class="btn btn-primary btn-sm">🍴 派生 / Remix</button>
       <button id="cm-fav" class="btn btn-ghost btn-sm">⭐ 收藏</button>
       <button id="cm-test-open" class="btn btn-ghost btn-sm">🧪 测试这个提示词</button>
       ${row.status === "published" ? '<button id="cm-report" class="btn btn-ghost btn-sm">⚠ 举报</button>' : ""}
@@ -460,21 +460,24 @@ export async function communityDetail(id: string): Promise<void> {
   document.querySelectorAll("#cm-rate-stars .star").forEach(s => s.addEventListener("click", () => cRate(row, Number(s.getAttribute("data-n")))));
   const cloneBtn = (document.getElementById("cm-clone") as HTMLButtonElement);
   if (cloneBtn) cloneBtn.addEventListener("click", () => {
+    // Remix/Fork：克隆升级为「带来源的派生」——跳详情页可直接编辑、改完可再发布回社区，形成完整 Remix 闭环。
     const tpl = {
-      slug: "mine-" + Date.now().toString(36),
-      title: row.title,
+      slug: "fork-" + row.id + "-" + Date.now().toString(36),
+      title: row.title + "（派生）",
       industry: row.industry,
-      task: "社区克隆",
-      summary: row.note || "从社区克隆的提示词",
+      task: "社区派生",
+      summary: row.note || "从社区派生的提示词",
       tags: row.tags || [],
       prompt: ctx.cCurrentPrompt,
       variables: [],
       mine: true,
-      generated: true,
+      generated: false,
+      forkedFrom: row.id,
+      forkedFromTitle: row.title,
     };
     Store.addMine(tpl);
-    toast("✓ 已克隆到「我的模板」");
-    location.hash = "#/my";
+    toast("✓ 已派生到「我的模板」，可直接编辑改造");
+    location.hash = "#/t/" + tpl.slug; // 跳详情页（canEdit 因 forkedFrom 为真），改造后可再「发布到社区」
   });
   const favBtn = (document.getElementById("cm-fav") as HTMLButtonElement);
   const reportBtn = (document.getElementById("cm-report") as HTMLButtonElement);

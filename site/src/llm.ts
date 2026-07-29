@@ -405,8 +405,8 @@ export const LLM = (function () {
   // 测试沙盒：把整条提示词作为"系统设定"，与用户多轮对话。
   // messages: {role:"user"|"assistant", content:string}[]（不含 system，最后一条必为当前 user 问题）
   // 逐厂商构造完整 messages（含 system=提示词 + 历史上下文），返回 {text, usage, elapsedMs}
-  async function chatWithPrompt(promptText, messages, onToken, signal) {
-    const c = resolveCfg();
+  async function chatWithPrompt(promptText, messages, onToken, signal, over = {}) {
+    const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
     if (!promptText || !promptText.trim()) throw new Error("没有可测试的提示词，请先生成。");
     const hist = (messages || []).filter(m => m && m.role && m.content);
