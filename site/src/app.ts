@@ -244,6 +244,7 @@ import { LLM } from "./llm.js";
 
   // ---------- 首页 ----------
   function home() {
+    setMeta("模法师 Promptly · AI 提示词模板架构师", "说一句话，AI 帮你生成可复用的高质量提示词模板。采用 F1→F2 两阶段范式，把模板与实例分离。");
     const inds = industries();
     const totalCount = TEMPLATES.length;
     app().innerHTML = `
@@ -546,6 +547,7 @@ import { LLM } from "./llm.js";
     current = JSON.parse(JSON.stringify(tpl));
     testMessages = []; testController = null; // 进入新模板时清空测试沙盒对话
     const isMine = Store.hasMine(slug);
+    setMeta(tpl.title, (tpl.summary || tpl.task || "").slice(0, 120));
     const tagHtml = (tpl.tags || []).map(t => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
     const industryOpts = ALL_INDUSTRIES.map(i =>
       `<option value="${esc(i)}" ${i === tpl.industry ? "selected" : ""}>${esc(i)}</option>`
@@ -1726,9 +1728,13 @@ import { LLM } from "./llm.js";
       submitBtn.disabled = true; submitBtn.style.opacity = ".55";
       (document.getElementById("pf-msg") as HTMLElement).textContent = "发布中…";
       try {
-        await LLM.communityPublish({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, industry, author, tags, note, prompt });
+        const pubRes = await LLM.communityPublish({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, industry, author, tags, note, prompt });
         close();
         toast("✓ 已发布到草稿「" + title + "」，去社区广场-我的发布里点「公开」即可上架");
+        // 发布去重（C3）：后端附带的相似模板提示，不打断流程
+        if (pubRes && pubRes.similar && pubRes.similar.length) {
+          setTimeout(() => toast("⚠ 社区已有相似模板：" + pubRes.similar.map((s: any) => s.title).join("、")), 800);
+        }
       } catch (e) {
         (document.getElementById("pf-msg") as HTMLElement).textContent = "发布失败：" + e.message;
         submitBtn.disabled = false; submitBtn.style.opacity = "1";
@@ -1820,6 +1826,7 @@ import { LLM } from "./llm.js";
   }
 
   async function community() {
+    setMeta("社区广场 · 模法师 Promptly", "浏览社区成员分享的 AI 提示词模板，克隆、测试、评分、评论。");
     app().innerHTML = `
       <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
       <h1 class="section-title" style="font-size:1.7rem;margin-top:8px;">社区广场</h1>
@@ -1999,6 +2006,20 @@ import { LLM } from "./llm.js";
     }));
   }
 
+  // 基础 SEO（C4）：动态设置 document.title + meta description + og 标签
+  function setMeta(title: string, desc?: string) {
+    document.title = title;
+    if (!desc) return;
+    const ensureMeta = (attr: string, name: string, val: string) => {
+      let el = document.head.querySelector(`meta[${attr}="${name}"]`) as HTMLMetaElement | null;
+      if (!el) { el = document.createElement("meta"); el.setAttribute(attr, name); document.head.appendChild(el); }
+      el.setAttribute("content", val);
+    };
+    ensureMeta("name", "description", desc);
+    ensureMeta("property", "og:title", title);
+    ensureMeta("property", "og:description", desc);
+    ensureMeta("property", "og:type", "website");
+  }
   function communityCard(r, tab) {
     const tagHtml = (r.tags || []).map(t => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
     const actions = tab === "mine"
@@ -2018,7 +2039,7 @@ import { LLM } from "./llm.js";
     return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;">
       <div class="flex items-center justify-between">
         <span class="pill pill-violet">${esc(r.industry)}</span>
-        <span class="text-xs muted">${esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
+        <span class="text-xs muted">${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
       </div>
       <h3 style="margin-top:6px;">${esc(r.title)}</h3>
       <div class="mt-1">${tagHtml}</div>
@@ -2040,7 +2061,7 @@ import { LLM } from "./llm.js";
       <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
       <div class="mt-3">
         <h1 class="section-title" style="font-size:1.6rem;">${esc(row.title)}</h1>
-        <div class="muted" style="font-size:.85rem;margin-top:6px;"><span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}</div>
+        <div class="muted" style="font-size:.85rem;margin-top:6px;"><span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}</div>
       </div>
       <div class="mt-2">${tagHtml}</div>
       ${row.note ? `<p class="slate" style="margin-top:10px;line-height:1.6;">${esc(row.note)}</p>` : ""}
@@ -2090,9 +2111,60 @@ import { LLM } from "./llm.js";
         </div>
       </div>
       <div id="cm-msg" class="muted" style="font-size:.78rem;margin-top:12px;"></div>
+      <div class="card tpl-card" style="margin-top:16px;">
+        <div class="ttl">💬 评论 <span id="cm-comment-count" class="muted" style="font-size:.75rem;"></span></div>
+        <div id="cm-comments" class="mt-2"></div>
+        <div class="flex gap-2 mt-3 items-start">
+          <textarea id="cm-comment-input" class="input" rows="2" style="flex:1;" placeholder="发表你的看法…（需登录）"></textarea>
+          <button id="cm-comment-send" class="btn btn-primary btn-sm" style="align-self:flex-end;">发送</button>
+        </div>
+      </div>
     `;
 
+    setMeta(row.title, (row.note || row.prompt || "").slice(0, 120));
     cLoadRate(row);
+    // 评论区（C1）
+    const loadComments = async (itemId: string) => {
+      const box = (document.getElementById("cm-comments") as HTMLElement);
+      const cnt = (document.getElementById("cm-comment-count") as HTMLElement);
+      if (!box) return;
+      try {
+        const cs = await LLM.communityComments(itemId);
+        cnt.textContent = cs.length ? "（" + cs.length + "）" : "";
+        box.innerHTML = cs.length ? cs.map((c: any) => `
+          <div class="comment-item" style="padding:8px 0;border-top:1px solid var(--brand-100);">
+            <div class="flex items-center justify-between">
+              <span style="font-size:.82rem;"><b>${esc(c.author)}</b></span>
+              <span class="text-xs muted">${new Date(c.createdAt).toLocaleString()}</span>
+            </div>
+            <div style="font-size:.85rem;margin-top:3px;white-space:pre-wrap;word-break:break-word;">${esc(c.content)}</div>
+          </div>`).join("") : '<p class="muted" style="font-size:.78rem;">还没有评论，来抢沙发～</p>';
+      } catch (e) {
+        box.innerHTML = '<p class="muted" style="font-size:.78rem;">评论加载失败：' + esc(e.message) + '</p>';
+      }
+    };
+    loadComments(row.id);
+    const commentSend = (document.getElementById("cm-comment-send") as HTMLButtonElement);
+    const commentInput = (document.getElementById("cm-comment-input") as HTMLTextAreaElement);
+    if (commentSend && commentInput) {
+      const doSend = async () => {
+        const text = commentInput.value.trim();
+        if (!text) return;
+        commentSend.disabled = true;
+        try {
+          await LLM.communityComment(row.id, text);
+          commentInput.value = "";
+          toast("✓ 评论已发布");
+          await loadComments(row.id);
+        } catch (e: any) {
+          toast("✗ " + (e.message || "评论失败"));
+        } finally {
+          commentSend.disabled = false;
+        }
+      };
+      commentSend.addEventListener("click", doSend);
+      commentInput.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    }
     document.querySelectorAll("#cm-rate-stars .star").forEach(s => s.addEventListener("click", () => cRate(row, Number(s.getAttribute("data-n")))));
     const cloneBtn = (document.getElementById("cm-clone") as HTMLButtonElement);
     if (cloneBtn) cloneBtn.addEventListener("click", () => {
@@ -2158,6 +2230,33 @@ import { LLM } from "./llm.js";
     if (cRefineCancel) cRefineCancel.addEventListener("click", closeRefineBox);
   }
 
+  async function authorPage(authorId) {
+    app().innerHTML = `<a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a><div class="mt-3 muted">加载中…</div>`;
+    let data;
+    try { data = await LLM.communityAuthor(authorId); }
+    catch (e) {
+      app().innerHTML = `<a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a><p class="mt-3">加载失败：${esc(e.message)}</p>`;
+      return;
+    }
+    const items = data.items || [];
+    setMeta("👤 " + data.author + " · 模法师 Promptly", (data.author || "作者") + " 发布了 " + items.length + " 个提示词模板");
+    app().innerHTML = `
+      <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
+      <div class="mt-3">
+        <h1 class="section-title" style="font-size:1.5rem;">👤 ${esc(data.author)}</h1>
+        <div class="muted" style="font-size:.85rem;margin-top:6px;">${items.length} 个已公开模板</div>
+      </div>
+      <div id="author-wrap" class="mt-4">${items.length ? items.map(r => communityCard(r, "square")).join("") : '<p class="muted">该作者还没有公开的模板。</p>'}</div>
+    `;
+    const wrap = (document.getElementById("author-wrap") as HTMLElement);
+    if (wrap && items.length) {
+      wrap.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => { location.hash = "#/c/" + encodeURIComponent(c.getAttribute("data-id")); }));
+      wrap.querySelectorAll(".cm-report").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        reportDialog(b.getAttribute("data-id"), b.getAttribute("data-title"));
+      }));
+    }
+  }
   function appendTestBubbleTo(log, text, role) {
     if (!log) return;
     const b = document.createElement("div");
@@ -2332,6 +2431,7 @@ import { LLM } from "./llm.js";
     if (parts[0] === "settings") return settings();
     if (parts[0] === "community") return community();
     if (parts[0] === "c") return communityDetail(decodeURIComponent(parts[1] || ""));
+    if (parts[0] === "u") return authorPage(decodeURIComponent(parts[1] || ""));
     if (parts[0] === "traces") return traces();
     return home();
   }

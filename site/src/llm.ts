@@ -702,6 +702,21 @@ export const LLM = (function () {
   async function communityReport(id, reason, detail) {
     return throwOnErr(await gatedFetch("/community/report", { id, reason, detail }), "举报");
   }
+  // 评论（C1）：登录用户发表；公开列表读取
+  async function communityComment(itemId, content) {
+    return throwOnErr(await gatedFetch("/community/comment", { itemId, content }), "评论");
+  }
+  async function communityComments(itemId) {
+    const r = await fetch("/community/comments?itemId=" + encodeURIComponent(itemId));
+    if (!r.ok) throw new Error("加载评论失败 " + r.status);
+    return r.json();
+  }
+  // 作者主页（C2）：列出某作者已公开模板
+  async function communityAuthor(authorId) {
+    const r = await fetch("/community/author?authorId=" + encodeURIComponent(authorId));
+    if (!r.ok) throw new Error("加载作者主页失败 " + r.status);
+    return r.json();
+  }
   // 审核台数据（管理员）
   async function communityModeration() {
     const r = await gatedFetch("/community/moderation", {});
@@ -751,5 +766,5 @@ export const LLM = (function () {
     return r.json();
   }
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
 })();

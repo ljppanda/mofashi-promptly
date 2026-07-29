@@ -368,6 +368,78 @@ export function listCommunityMine(authorId: string): CommunityRow[] {
   return rows.map(communityFromRow);
 }
 
+// 社区评论（C1）：模板/实例讨论区。作者名以服务端鉴权身份为准（authorId 绑定）。
+export interface CommentRow {
+  id: string;
+  itemId: string;
+  author: string;
+  authorId: string | null;
+  content: string;
+  createdAt: number;
+}
+export function addComment(itemId: string, authorId: string | null, author: string, content: string): CommentRow {
+  const id = "cm" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  db.prepare(
+    `INSERT INTO comments(id,item_id,author_id,author,content,created_at,status)
+     VALUES(?,?,?,?,?,?,'visible')`,
+  ).run(id, itemId, authorId ?? null, author || "匿名", content.slice(0, 2000), Date.now());
+  return getComment(id)!;
+}
+export function getComment(id: string): CommentRow | null {
+  const r = db.prepare("SELECT * FROM comments WHERE id = ?").get(id) as any;
+  if (!r) return null;
+  return { id: r.id, itemId: r.item_id, author: r.author, authorId: r.author_id ?? null, content: r.content, createdAt: r.created_at };
+}
+export function listComments(itemId: string): CommentRow[] {
+  const rows = db.prepare("SELECT * FROM comments WHERE item_id = ? AND status = 'visible' ORDER BY created_at ASC").all(itemId) as any[];
+  return rows.map((r: any) => ({ id: r.id, itemId: r.item_id, author: r.author, authorId: r.author_id ?? null, content: r.content, createdAt: r.created_at }));
+}
+// 仅作者本人或管理员可删；软删除（status='deleted'）保留审计痕迹。
+export function deleteComment(id: string, actorId: string | null, isAdmin: boolean): boolean {
+  const r = db.prepare("SELECT * FROM comments WHERE id = ?").get(id) as any;
+  if (!r) return false;
+  if (!(isAdmin || (actorId && r.author_id && r.author_id === actorId))) return false;
+  db.prepare("UPDATE comments SET status = 'deleted' WHERE id = ?").run(id);
+  return true;
+}
+// 作者主页（C2）：列出某作者已公开模板（按 author_id 过滤，仅 published）。
+// 匿名发布（author_id 为 null）无主页，前端对 authorId 为空不生成链接。
+export function listCommunityByAuthor(authorId: string): CommunityRow[] {
+  if (!authorId) return [];
+  const rows = db.prepare("SELECT * FROM community WHERE author_id = ? AND status = 'published' ORDER BY COALESCE(published_at, created_at) DESC").all(authorId) as any[];
+  return rows.map(communityFromRow);
+}
+// 发布去重（C3）：在已公开模板里找与待发布内容相似的，返回 top（bigram 相似度）。
+function bigramSim(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const bg = (s: string) => { const set = new Set<string>(); for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2)); return set; };
+  const A = bg(a), B = bg(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0; for (const x of A) if (B.has(x)) inter++;
+  return inter / (A.size + B.size - inter);
+}
+export function findSimilarCommunity(title: string, prompt: string, limit = 3): { id: string; title: string; similarity: number }[] {
+  const all = db.prepare("SELECT id,title,prompt FROM community WHERE status='published'").all() as any[];
+  if (!all.length) return [];
+  const norm = (s: string) => (s || "").toLowerCase().replace(/[\s\p{P}]+/gu, "");
+  const nt = norm(title);
+  const np = norm(prompt).slice(0, 400);
+  return all.map((r: any) => {
+    const rt = norm(r.title);
+    const rp = norm(r.prompt).slice(0, 400);
+    let tSim = 0;
+    if (nt && rt) {
+      if (nt.includes(rt) || rt.includes(nt)) tSim = 0.9;
+      else tSim = bigramSim(nt, rt);
+    }
+    const pSim = (np && rp) ? bigramSim(np, rp) : 0;
+    const sim = Math.max(tSim, pSim * 0.8);
+    return { id: r.id, title: r.title, similarity: Math.round(sim * 100) / 100 };
+  }).filter((x: any) => x.similarity >= 0.6)
+    .sort((a: any, b: any) => b.similarity - a.similarity)
+    .slice(0, limit);
+}
+
 // =====================================================================
 // 用户账号（真实多用户体系）：注册 / 登录 / 角色 / 管理
 // =====================================================================

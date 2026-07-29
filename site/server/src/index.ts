@@ -17,6 +17,7 @@ import {
   unpublishCommunity, deleteCommunity, communityRate, communityUse, communityFavorite,
   reportCommunity, listReports, resolveReport, logModeration, listModerationLog,
   listCommunityMine, draftsCommunityMine, getUserById,
+  addComment, listComments, deleteComment, listCommunityByAuthor, findSimilarCommunity,
   recordTrace, listTraces, closeDb,
 } from "./db.js";
 import {
@@ -460,7 +461,9 @@ async function handleCommunityPublish(req: http.IncomingMessage, res: http.Serve
     tags: Array.isArray(p.tags) ? p.tags.map(String).slice(0, 8) : [],
     note: p.note || "",
   });
-  sendJSON(res, 200, r);
+  // 发布去重（C3）：草稿创建后查已公开模板相似度，附到返回供前端提示（不打断流程）
+  const similar = findSimilarCommunity(String(p.title), String(p.prompt));
+  sendJSON(res, 200, { ...r, similar });
 }
 async function handleCommunityList(req: http.IncomingMessage, res: http.ServerResponse) {
   const u = new URL(req.url ?? "/", "http://localhost");
@@ -565,6 +568,50 @@ async function handleCommunityReport(req: http.IncomingMessage, res: http.Server
   reportCommunity(String(p.id), String(p.reason), String(p.detail || ""));
   sendJSON(res, 200, { ok: true });
 }
+async function handleCommunityComment(req: http.IncomingMessage, res: http.ServerResponse) {
+  const me = authPayload(req);
+  if (!me) return sendJSON(res, 401, { error: "请先登录后再评论" });
+  const raw = await readBody(req);
+  let p: any; try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
+  const vErr = checkLengths(p, { itemId: LIMITS.ID, content: 2000 });
+  if (vErr.length) return sendJSON(res, 400, { error: vErr.join("；") });
+  if (!p.itemId || !p.content || !String(p.content).trim()) return sendJSON(res, 400, { error: "缺少 itemId 或评论内容" });
+  const item = getCommunity(String(p.itemId));
+  if (!item) return sendJSON(res, 404, { error: "无此社区提示词" });
+  const author = me.role === "admin" ? "admin" : (getUserById(me.sub)?.username || me.sub);
+  const r = addComment(String(p.itemId), me.sub, author, String(p.content).trim());
+  sendJSON(res, 200, r);
+}
+async function handleCommunityComments(req: http.IncomingMessage, res: http.ServerResponse) {
+  const u = new URL(req.url ?? "/", "http://localhost");
+  const itemId = u.searchParams.get("itemId");
+  if (!itemId) return sendJSON(res, 400, { error: "缺少 itemId" });
+  sendJSON(res, 200, listComments(itemId));
+}
+async function handleCommunityAuthor(req: http.IncomingMessage, res: http.ServerResponse) {
+  const u = new URL(req.url ?? "/", "http://localhost");
+  const authorId = u.searchParams.get("authorId");
+  if (!authorId) return sendJSON(res, 400, { error: "缺少 authorId" });
+  const rows = listCommunityByAuthor(authorId);
+  const authorName = rows.length ? rows[0].author : (getUserById(authorId)?.username || authorId);
+  sendJSON(res, 200, { authorId, author: authorName, items: rows });
+}
+// 基础 SEO（C4）：sitemap.xml 列出已公开社区模板；robots.txt 指向 sitemap。
+// SITE_URL 环境变量可覆盖站点根（部署时设为公网域名，默认 localhost）。
+async function handleSitemap(req: http.IncomingMessage, res: http.ServerResponse) {
+  const base = (process.env.SITE_URL || "http://localhost:8000").replace(/\/$/, "");
+  const items = listCommunity({ status: "published", limit: 5000 });
+  const urls = items.map((it: any) => `  <url><loc>${base}/#/c/${encodeURIComponent(it.id)}</loc><priority>0.7</priority></url>`).join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+  res.writeHead(200, { "content-type": "application/xml; charset=utf-8" });
+  res.end(xml);
+}
+async function handleRobots(req: http.IncomingMessage, res: http.ServerResponse) {
+  const base = (process.env.SITE_URL || "http://localhost:8000").replace(/\/$/, "");
+  const txt = `User-agent: *\nAllow: /\nSitemap: ${base}/sitemap.xml\n`;
+  res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+  res.end(txt);
+}
 async function handleCommunityModeration(req: http.IncomingMessage, res: http.ServerResponse) {
   sendJSON(res, 200, {
     drafts: draftsCommunity(),
@@ -643,7 +690,7 @@ const server = http.createServer(async (req, res) => {
   // 普通用户闸门：已登录即可（发布/评分/使用/收藏/举报/删除草稿）
   const USER_GUARDED = [
     "/community/publish", "/community/rate", "/community/use", "/community/favorite",
-    "/community/report", "/community/delete",
+    "/community/report", "/community/delete", "/community/comment",
   ];
   if (USER_GUARDED.some((p) => url.startsWith(p) && req.method === "POST") && !verifyRequestToken(req)) {
     return sendJSON(res, 401, { error: "请先登录后再操作" });
@@ -689,10 +736,15 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/community/list") && req.method === "GET") return handleCommunityList(req, res);
   if (url.startsWith("/community/moderation") && req.method === "GET") return handleCommunityModeration(req, res);
   if (url.startsWith("/community/report/resolve") && req.method === "POST") return handleCommunityReportResolve(req, res);
+  if (url.startsWith("/community/comment") && req.method === "POST") return handleCommunityComment(req, res);
+  if (url.startsWith("/community/comments") && req.method === "GET") return handleCommunityComments(req, res);
+  if (url.startsWith("/community/author") && req.method === "GET") return handleCommunityAuthor(req, res);
   if (url.startsWith("/community/report") && req.method === "POST") return handleCommunityReport(req, res);
   if (url.startsWith("/community/takedown") && req.method === "POST") return handleCommunityTakedown(req, res);
   if (url.startsWith("/traces") && req.method === "GET") return handleTraces(req, res);
   if (url.startsWith("/ops/metrics") && req.method === "GET") return handleOpsMetrics(req, res);
+  if (url === "/sitemap.xml" && req.method === "GET") return handleSitemap(req, res);
+  if (url === "/robots.txt" && req.method === "GET") return handleRobots(req, res);
   return serveStatic(req, res);
 });
 

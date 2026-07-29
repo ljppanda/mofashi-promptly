@@ -88,9 +88,25 @@ export const MIGRATIONS: Migration[] = [
       )`);
     },
   },
+  {
+    version: 2,
+    name: "comments_2026_07_29",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS comments(
+        id TEXT PRIMARY KEY,
+        item_id TEXT NOT NULL,
+        author TEXT NOT NULL DEFAULT '匿名',
+        author_id TEXT,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'visible'   -- visible | deleted
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_comments_item ON comments(item_id, created_at)`);
+    },
+  },
   // 未来变更在此追加，例如：
   // {
-  //   version: 2,
+  //   version: 3,
   //   name: "add_community_flag",
   //   up: (db) => { db.exec("ALTER TABLE community ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0"); },
   // },

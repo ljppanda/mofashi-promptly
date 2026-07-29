@@ -536,3 +536,24 @@ body {
   border-color: #bbf7d0;
 }
 
+/* ===== 移动端适配（D1） ===== */
+.author-link { color: var(--brand-700); font-weight: 600; text-decoration: none; }
+.author-link:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+  .site-header nav { flex-wrap: wrap; gap: 2px; }
+  .nav-link2 { padding: 6px 8px; font-size: .82rem; }
+}
+
+@media (max-width: 640px) {
+  .site-header nav { row-gap: 4px; }
+  .nav-link2 { font-size: .76rem; padding: 5px 7px; }
+  .test-input-row { flex-direction: column; align-items: stretch; }
+  .test-input-row .btn { width: 100%; }
+  .modal-card { padding: 16px; }
+  .btn { min-height: 40px; }            /* 触控友好：最小可点击高度 */
+  .stat-row { gap: 18px; }
+  .feat-grid, .steps { grid-template-columns: 1fr; }
+  .ind-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+}
+
