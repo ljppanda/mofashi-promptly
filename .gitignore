@@ -37,3 +37,11 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# ============ 内部文档 / 生成产物（不公开，仅本地保留） ============
+# 产品需求、Agent 架构等内部规划文档，不进公开仓库
+PRD-提示词模板框架站.md
+ARCH-agent.md
+# 评测跑出来的报告（会重生成，不进版本库；eval_chain_report.md 同理未跟踪）
+site/server/scripts/eval_rag_report.md
+site/server/scripts/eval_chain_report.md
