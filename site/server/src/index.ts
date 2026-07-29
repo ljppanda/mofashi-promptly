@@ -9,7 +9,7 @@ import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAgent, runAgentUse, runAgentClarify, runAgentRefine } from "./agent.js";
-import { invalidateRagIndex } from "./rag.js";
+import { invalidateRagIndex, warmupRag } from "./rag.js";
 import { PROVIDERS, providerOf, labelOf } from "./providers.js";
 import { board, bump, rate, getOne, resetAll, type BoardSort } from "./metrics.js";
 import {
@@ -726,4 +726,6 @@ process.on("unhandledRejection", (reason) => {
 server.listen(PORT, () => {
   log.info(`静态 + /relay + /agent 已启动: http://localhost:${PORT}`);
   log.info(`静态根: ${STATIC_ROOT}`);
+  // 启动后预热 RAG 索引（不阻塞请求处理；失败也无妨，首次检索会惰性重建）
+  warmupRag().catch((e) => log.warn("RAG 预热异常", { message: (e as Error)?.message }));
 });

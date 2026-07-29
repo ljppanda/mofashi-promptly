@@ -11,6 +11,8 @@
     "serve": "node dist/index.js",
     "verify:rag": "tsx scripts/verify_semantic_rag.ts",
     "backup": "node scripts/backup.mjs",
+    "eval:rag": "tsx scripts/eval_rag.ts",
+    "eval:chain": "tsx scripts/eval_chain.ts",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

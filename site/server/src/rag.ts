@@ -422,6 +422,17 @@ export function invalidateRagIndex(): void {
   lastCommSigAt = 0;
 }
 
+// 启动预热：在服务启动阶段主动构建一次索引，避免首条检索请求的冷启动延迟。
+// 失败不影响主链路（retrieve 仍会惰性重建），仅记日志。
+export async function warmupRag(): Promise<void> {
+  try {
+    await getIndex();
+    console.log(`[rag] 索引预热完成（${currentItems.length} 条，语义=${semanticReady ? "开" : "关"}，reranker=${rerankerReady ? "开" : "关"}）`);
+  } catch (e) {
+    console.warn("[rag] 索引预热失败，首次检索将惰性重建：", (e as Error)?.message);
+  }
+}
+
 async function getIndex(): Promise<VectorStoreIndex> {
   const desired = desiredSig();
   // 命中缓存（构建完成或正在构建同一集合）直接复用

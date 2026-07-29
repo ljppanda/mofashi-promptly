@@ -12,11 +12,12 @@ import { runMigrations } from "./migrations.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, "..", "data");
-const FILE = path.join(DATA_DIR, "app.db");
+// 允许通过 APP_DB_FILE 覆盖数据库路径（便于测试隔离 / 数据目录可移植）；默认仍是 data/app.db。
+const FILE = process.env.APP_DB_FILE ? path.resolve(process.env.APP_DB_FILE) : path.join(DATA_DIR, "app.db");
 const METRICS_JSON = path.join(DATA_DIR, "metrics.json");
 const CORPUS = path.join(DATA_DIR, "templates.json");
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(path.dirname(FILE), { recursive: true });
 
 const db = new DatabaseSync(FILE);
 // 生产加固（P1-③ 数据可靠性）：WAL 模式让读写不互斥（多读+单写并发），busy_timeout 让并发写
