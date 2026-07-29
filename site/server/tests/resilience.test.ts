@@ -17,11 +17,12 @@ test("migrations: 内存库应用基线 v1 并创建全部表", () => {
   const db = new DatabaseSync(":memory:");
   const ran = runMigrations(db);
   assert.ok(ran.includes("baseline_2026_07_29"), "应执行基线迁移");
-  for (const t of ["metrics", "community", "users", "reports", "moderation_log", "traces", "schema_migrations"]) {
+  assert.ok(ran.includes("comments_2026_07_29"), "应执行 v2 评论表迁移");
+  for (const t of ["metrics", "community", "users", "reports", "moderation_log", "traces", "comments", "schema_migrations"]) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
     assert.ok(row, `表 ${t} 应存在`);
   }
-  assert.deepEqual(appliedVersions(db), [1]);
+  assert.deepEqual(appliedVersions(db), [1, 2]);
 });
 
 test("migrations: 重复运行幂等（老库不破坏）", () => {
@@ -29,19 +30,19 @@ test("migrations: 重复运行幂等（老库不破坏）", () => {
   runMigrations(db);
   const ran2 = runMigrations(db);
   assert.deepEqual(ran2, [], "第二次不应再执行任何迁移");
-  assert.deepEqual(appliedVersions(db), [1]);
+  assert.deepEqual(appliedVersions(db), [1, 2]);
 });
 
 test("migrations: 在已有表上追加 v2 能补齐而不冲突", () => {
   const db = new DatabaseSync(":memory:");
   runMigrations(db);
-  // 模拟一次 v2 迁移（ALTER 新列）
-  db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY, version INTEGER NOT NULL, applied_at INTEGER NOT NULL)");
+  assert.deepEqual(appliedVersions(db), [1, 2], "基线 v1 + 评论 v2 应已应用");
+  // 模拟一次外部已记录的 v2（非本 runner 写入的同名行），验证 runner 按版本号幂等、不会重复补齐
   db.exec("INSERT INTO schema_migrations(name,version,applied_at) VALUES('v2_fake',2,0)");
-  // 再跑 runMigrations（无新迁移定义）应保持 [1] 且幂等
+  // 再跑 runMigrations（无新迁移定义）应保持幂等、不冲突
   const ran = runMigrations(db);
   assert.deepEqual(ran, []);
-  assert.deepEqual(appliedVersions(db).sort(), [1, 2]);
+  assert.deepEqual([...new Set(appliedVersions(db))].sort(), [1, 2]);
 });
 
 // ---------------- 重试退避分类 ----------------
