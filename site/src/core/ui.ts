@@ -42,7 +42,17 @@ export function toast(msg: string): void {
 }
 
 // 通用二次确认弹窗（替代原生 confirm，风格统一）
-export function confirmDialog(title: string, message: string, onConfirm: () => void | Promise<void>): void {
+// opts: confirmLabel 主按钮文案（默认「删除」）、cancelLabel 次按钮文案（默认「取消」）、
+//       danger 主按钮是否危险红（默认 true）、onCancel 点取消/点遮罩时的回调
+export function confirmDialog(
+  title: string,
+  message: string,
+  onConfirm: () => void | Promise<void>,
+  opts?: { confirmLabel?: string; cancelLabel?: string; danger?: boolean; onCancel?: () => void }
+): void {
+  const confirmLabel = opts?.confirmLabel ?? "删除";
+  const cancelLabel = opts?.cancelLabel ?? "取消";
+  const danger = opts?.danger ?? true;
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
   ov.innerHTML = `
@@ -50,16 +60,16 @@ export function confirmDialog(title: string, message: string, onConfirm: () => v
       <div class="ttl">${esc(title)}</div>
       <p class="slate" style="margin-top:10px;line-height:1.6;font-size:.9rem;">${esc(message)}</p>
       <div class="flex gap-2 mt-4 flex-wrap items-center">
-        <button id="cd-yes" class="btn btn-danger btn-sm">删除</button>
-        <button id="cd-no" class="btn btn-ghost btn-sm">取消</button>
+        <button id="cd-yes" class="btn ${danger ? "btn-danger" : "btn-primary"} btn-sm">${esc(confirmLabel)}</button>
+        <button id="cd-no" class="btn btn-ghost btn-sm">${esc(cancelLabel)}</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
   const close = () => ov.remove();
-  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.addEventListener("click", (e) => { if (e.target === ov) { if (opts?.onCancel) opts.onCancel(); close(); } });
   const yes = (document.getElementById("cd-yes") as HTMLButtonElement);
   const no = (document.getElementById("cd-no") as HTMLButtonElement);
-  if (no) no.addEventListener("click", close);
+  if (no) no.addEventListener("click", () => { if (opts?.onCancel) opts.onCancel(); close(); });
   if (yes) yes.addEventListener("click", async () => {
     yes.disabled = true; yes.style.opacity = ".55";
     try { await onConfirm(); } finally { close(); }

@@ -3,6 +3,7 @@
 //   core/   —— Context(ctx 依赖注入) / Module(ui·auth·steps) / Configuration(config)
 //   views/  —— Component(各页面) + Factory(ctx 工厂) + Router(本文件)
 // 具体渲染逻辑都在各视图模块，本文件不承载业务细节。
+import "./tailwind.css"; // 构建期编译的 Tailwind 工具类（替代 cdn.tailwindcss.com 运行时依赖）
 import "./core/auth.js"; // 副作用：初始化 window.Auth 登录态（设置页 / 社区写操作依赖）
 
 import { ctx } from "./core/ctx.js";

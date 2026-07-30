@@ -50,7 +50,7 @@ export function home(): void {
       <div id="gen-steps" class="gen-steps" style="display:none;margin-top:12px;"></div>
       <div id="gen-rag" class="gen-rag" style="display:none;"></div>
       <pre id="gen-live" class="code-box" style="display:none;margin-top:12px;"></pre>
-      <a id="gen-open" href="#" class="btn-link" style="display:none;margin-top:12px;">查看生成的模板 →</a>
+      <a id="gen-open" href="#" class="btn btn-primary" style="display:none;margin-top:14px;">✨ 打开模板，生成你的提示词 →</a>
       <p class="muted" style="font-size:.8rem;margin-top:10px;">当前调用模型：<span style="font-weight:600;color:var(--slate)">${esc(LLM.effectiveLabel())}</span></p>
     </section>
 

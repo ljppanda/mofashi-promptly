@@ -3,7 +3,7 @@
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";
-import { fmtUsage } from "../core/ui.js";
+import { fmtUsage, confirmDialog } from "../core/ui.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
 import { GEN_STEPS_5 } from "../core/config.js";
 
@@ -16,6 +16,19 @@ export async function handleGenerate(): Promise<void> {
   const industry = (document.getElementById("gen-industry") as HTMLSelectElement).value;
   const sentence = (document.getElementById("gen-input") as HTMLInputElement).value.trim();
   if (!sentence) { msg.textContent = "请先描述你的需求。"; return; }
+  // 若本页刚刚已经成功生成过模板（入口按钮已出现），再次点「生成模板」需二次确认，
+  // 避免误生成重复草稿、覆盖掉上一份还没来得及去填写的结果。
+  if (openBtn && openBtn.style.display !== "none") {
+    const ok = await new Promise<boolean>((resolve) => {
+      confirmDialog(
+        "已经生成过一个模板了",
+        "本页刚刚已生成一份模板，点下方「✨ 打开模板，生成你的提示词」即可去填写并生成成品提示词。再次生成会新建一份草稿（不会覆盖刚才那份，两份都在「我的模板」里），确定要重新生成吗？",
+        () => resolve(true),
+        { confirmLabel: "重新生成", danger: false, onCancel: () => resolve(false) }
+      );
+    });
+    if (!ok) return;
+  }
   live.style.display = "block";
   live.textContent = "";
   renderRagRefs(null);
@@ -64,7 +77,9 @@ export async function handleGenerate(): Promise<void> {
     // 不再自动跳转：保留状态机流程可见，由用户点「查看生成的模板」进入详情
     msg.textContent = "✓ 已生成模板：「" + (res.tpl.title || "未命名") + "」";
     openBtn.href = "#/t/" + res.tpl.slug;
-    openBtn.style.display = "inline-block";
+    openBtn.style.display = "inline-flex";
+    // 上方可能还有一大段生成过程输出，自动把「去生成提示词」入口滚进视野，避免找不到
+    setTimeout(() => { try { openBtn.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {} }, 60);
   } catch (e) {
     if (ctx.genController && ctx.genController.signal.aborted) {
       live.textContent += "\n\n■ 已停止生成";

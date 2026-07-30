@@ -8,6 +8,9 @@ site/server/.env
 # 会话令牌 HMAC 签名密钥（服务端自动生成，缺失会自动重建）
 site/server/data/.app_secret
 
+# 本地测试用 LLM Key（deepseek / 通义百炼），绝不入库
+apikey.txt
+
 # ============ 依赖 ============
 node_modules/
 site/node_modules/
@@ -16,6 +19,8 @@ site/server/node_modules/
 # ============ 构建产物（由 npm run build 生成） ============
 site/dist/
 dist/
+# 构建前临时挪出的旧 dist（mv dist dist_bak 绕过回收站钩子用），非源码
+site/dist_bak/
 
 # ============ 运行时数据 / 数据库 ============
 # ⚠️ templates.json 是源码语料种子，需保留；下面只排除运行时产物

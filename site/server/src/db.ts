@@ -272,6 +272,38 @@ export function publishCommunity(rec: { id: string; title: string; industry: str
   return getCommunity(rec.id)!;
 }
 
+// 社区冷启动种子（官方精选模板）。当 community 表无「已公开」记录时注入，
+// 让社区首页 / 热度榜 / sitemap 有真实可展示内容；已有内容则不重复注入（幂等）。
+type SeedTpl = { id: string; title: string; industry: string; prompt: string; tags: string[]; note: string; uses: number; favorites: number; ratingSum: number; ratingCount: number };
+const COMMUNITY_SEED: SeedTpl[] = [
+  { id: "seed-xhs-note", industry: "写作创作", title: "爆款小红书种草笔记生成器", tags: ["小红书", "种草", "营销文案"], note: "输入产品与卖点，生成带钩子标题+正文+话题标签的小红书笔记。", uses: 320, favorites: 88, ratingSum: 270, ratingCount: 32, prompt: "你是资深小红书操盘手。产品：{{product}}；核心卖点：{{selling_point}}；目标人群：{{audience}}。\n请生成一篇种草笔记：① 吸引点击的标题（含 emoji 与悬念）；② 300 字内正文（场景代入+痛点+卖点+使用体验）；③ 5 个 #话题标签。语气真实、有网感，避免硬广感。" },
+  { id: "seed-code-review", industry: "编程开发", title: "代码评审与优化建议助手", tags: ["Code Review", "重构", "最佳实践"], note: "粘贴代码片段，给出问题点、风险与可落地的优化建议。", uses: 540, favorites: 150, ratingSum: 460, ratingCount: 55, prompt: "你是资深技术 Lead。请评审以下 {{language}} 代码：\n```\n{{code}}\n```\n输出：① 严重问题（正确性/安全/性能，按优先级）；② 可优化点（可读性/健壮性）；③ 给出关键改动后的代码片段。结论先讲风险，再给方案。" },
+  { id: "seed-weekly-report", industry: "职场办公", title: "结构化周报/日报生成器", tags: ["周报", "职场", "效率"], note: "把零散工作流水整理成上级爱看的结构化周报。", uses: 410, favorites: 95, ratingSum: 360, ratingCount: 44, prompt: "你是职场写作教练。本周完成的事件（要点列表）：{{tasks}}；下周期望推进：{{next}}。\n生成一份周报：分「本周进展（结果导向，量化成果）」「风险与阻塞」「下周计划」三部分，每条用动词开头，控制在 200 字内，专业克制。" },
+  { id: "seed-lesson-plan", industry: "教育培训", title: "互动式教案设计器", tags: ["教案", "教学", "互动"], note: "按知识点与学情生成可落地的互动教案。", uses: 180, favorites: 60, ratingSum: 150, ratingCount: 20, prompt: "你是教研专家。主题：{{topic}}；学段：{{grade}}；课时：{{duration}}；学生基础：{{level}}。\n设计教案：① 教学目标（知识/能力/素养）；② 导入（3 分钟情境问题）；③ 核心活动（含师生互动提问）；④ 巩固练习；⑤ 分层作业。突出互动与探究。" },
+  { id: "seed-product-detail", industry: "电商运营", title: "商品详情页卖点提炼", tags: ["电商", "详情页", "转化"], note: "从产品参数提炼打动人的购买理由与详情结构。", uses: 260, favorites: 70, ratingSum: 210, ratingCount: 26, prompt: "你是电商转化率专家。商品：{{product}}；参数/功能：{{features}}；目标客群：{{audience}}。\n输出详情页结构：① 首屏价值主张一句话；② 3 个核心卖点（每个配「场景痛点→利益」）；③ 信任背书建议；④ 催单话术。围绕「用户得到什么」而非「产品有什么」。" },
+  { id: "seed-finance-plan", industry: "金融", title: "个人理财规划建议顾问", tags: ["理财", "规划", "个人金融"], note: "基于收支与目标给出可执行的理财配置建议（科普，提示风险）。", uses: 150, favorites: 40, ratingSum: 120, ratingCount: 16, prompt: "你是持牌理财规划师（仅作科普，不构成投资建议）。月收入：{{income}}；月支出：{{expense}}；可投资资产：{{asset}}；目标：{{goal}}；风险偏好：{{risk}}。\n给出：① 应急备用金建议；② 资产配置比例框架（现金/固收/权益）；③ 下一步行动清单。强调分散与长期，提示风险自担。" },
+  { id: "seed-health-article", industry: "医疗健康", title: "健康科普文章通俗化改写", tags: ["科普", "健康", "改写"], note: "把专业医学内容改写成易懂、准确、无误导的科普文。", uses: 200, favorites: 66, ratingSum: 165, ratingCount: 22, prompt: "你是医学科普编辑。原始内容：{{content}}；受众：{{audience}}（非专业）。\n改写为通俗科普：① 用生活化类比解释机制；② 去除黑话，必要处加括号注释；③ 标注「如有症状请就医」免责提示；④ 不夸大疗效、不荐药。确保科学准确、可读性强。" },
+  { id: "seed-contract-review", industry: "法律", title: "合同条款风险点审查清单", tags: ["合同", "法律", "风控"], note: "扫描合同关键条款，提示常见风险与修改建议（非法律意见）。", uses: 130, favorites: 50, ratingSum: 110, ratingCount: 15, prompt: "你是企业法务（提示：本输出不构成正式法律意见）。合同类型：{{type}}；相对方：{{party}}；核心条款文本：{{clause}}。\n输出风险审查清单：① 每条风险（权责不对等/模糊表述/违约救济缺失等）；② 修改建议（指明应补充/删除的内容）；③ 必须保留的护城河条款。聚焦可执行。" },
+];
+export function seedCommunityIfEmpty(): number {
+  const row = db.prepare("SELECT COUNT(*) AS c FROM community WHERE status='published'").get() as any;
+  if (row && row.c > 0) return 0;
+  const now = Date.now();
+  const stmt = db.prepare(
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
+  );
+  let n = 0;
+  for (const s of COMMUNITY_SEED) {
+    const ts = now - n * 3600_000; // 每小时一篇，拉开发布时间，使「最新」排序有梯度
+    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
+    n++;
+  }
+  return n;
+}
+// 在常量定义之后调用（避免 TDZ）：公开模板为空时注入官方精选，避免社区/热度榜/sitemap 空状态。幂等。
+seedCommunityIfEmpty();
+
 export interface CommunityListOpts {
   status?: string;
   sort?: "heat" | "new" | "rating";

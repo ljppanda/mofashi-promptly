@@ -1,0 +1,5 @@
+/* Tailwind 构建期编译入口（替代 cdn.tailwindcss.com 运行时依赖）。
+   Vite + PostCSS 在 dev/build 时据此扫描源文件生成工具类 CSS。 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

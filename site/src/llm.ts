@@ -238,6 +238,7 @@ export const LLM = (function () {
 
   // OpenAI 兼容（含文心，已换取 token）的流式解析；返回 {text, usage}
   async function streamOpenAI(url, headers, body, onToken, signal) {
+    if (typeof onToken !== "function") onToken = () => {}; // 防空：F13 评测等场景会传 null
     body.stream_options = { include_usage: true }; // 让末块带上 usage
     const r = await relayFetch(url, "POST", headers, body, signal);
     if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
@@ -260,6 +261,7 @@ export const LLM = (function () {
 
   // Claude 流式：usage 分散在 message_start / message_delta
   async function streamClaude(url, headers, body, onToken, signal) {
+    if (typeof onToken !== "function") onToken = () => {}; // 防空：F13 评测等场景会传 null
     const r = await relayFetch(url, "POST", headers, body, signal);
     if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
     let full = "";
@@ -286,6 +288,7 @@ export const LLM = (function () {
 
   // Gemini 流式：usageMetadata 随块返回
   async function streamGemini(url, body, onToken, signal) {
+    if (typeof onToken !== "function") onToken = () => {}; // 防空：F13 评测等场景会传 null
     const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body, signal);
     if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
     let full = "";
@@ -313,6 +316,8 @@ export const LLM = (function () {
   async function callChatStream(system, user, onToken, over?, signal?) {
     const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
+    // 归一化 onToken：F13 评测 / 部分调用会传 null，下游 stream* 无条件调用 onToken 需防空
+    if (typeof onToken !== "function") onToken = () => {};
     const start = Date.now();
     let res;
     if (c.style === "claude") {

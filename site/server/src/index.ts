@@ -65,9 +65,9 @@ function buildCsp(): string {
   const connect = [...hosts].join(" ");
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://cdn.tailwindcss.com",
+    "img-src 'self' data:",
     "font-src 'self' data:",
     `connect-src ${connect}`,
     "base-uri 'self'",
@@ -601,8 +601,11 @@ async function handleCommunityAuthor(req: http.IncomingMessage, res: http.Server
 async function handleSitemap(req: http.IncomingMessage, res: http.ServerResponse) {
   const base = (process.env.SITE_URL || "http://localhost:8000").replace(/\/$/, "");
   const items = listCommunity({ status: "published", limit: 5000 });
-  const urls = items.map((it: any) => `  <url><loc>${base}/#/c/${encodeURIComponent(it.id)}</loc><priority>0.7</priority></url>`).join("\n");
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`;
+  // 始终包含站点核心路由，保证 sitemap 非空且可被搜索引擎收录；模板页按真实 id 动态列出。
+  const staticUrls = [`${base}/`, `${base}/#/community`, `${base}/#/board`];
+  const staticXml = staticUrls.map((u) => `  <url><loc>${u}</loc><priority>0.8</priority></url>`).join("\n");
+  const dynXml = items.map((it: any) => `  <url><loc>${base}/#/c/${encodeURIComponent(it.id)}</loc><priority>0.7</priority></url>`).join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${staticXml}${dynXml ? "\n" + dynXml : ""}\n</urlset>`;
   res.writeHead(200, { "content-type": "application/xml; charset=utf-8" });
   res.end(xml);
 }
