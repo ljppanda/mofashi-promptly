@@ -128,12 +128,12 @@ docker compose up -d --build
 4. **构建并启动**：`docker compose up -d --build`
 5. **验证**：`curl https://你的域名/healthz` 返回 `ok`；打开站点注册一个账号，实测一次「忘记密码」——生产链路用户会收到邮件，dev 降级则链接出现在 `docker compose logs` 与 `server/data/dev-reset-links.log`。
 6. **HTTPS（TLS）**：在容器前放 Caddy / Nginx 反代 80/443。最小 Caddy 片段（自动签发证书）：
-   ```caddyfile
-   # Caddyfile
-   your-domain.com {
-       reverse_proxy localhost:8000
-   }
-   ```
+    ```caddyfile
+    # Caddyfile
+    your-domain.com {
+        reverse_proxy localhost:8000
+    }
+    ```
 7. **数据备份**：定期备份 `site/server/data/`（或 compose 的 `appdata` 卷）——含 `app.db`(WAL 伴随文件) + `templates.json` 种子。**切勿备份进仓库**。
 
 > 说明：`docker-compose.yml` 已内置 `/healthz` 健康检查、数据卷 `appdata` 持久化、`unless-stopped` 重启策略；环境变量优先读 `./server/.env`（`env_file`），也可在 `environment:` 段覆盖。
