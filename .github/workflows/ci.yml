@@ -29,3 +29,25 @@ jobs:
 
       - name: Unit tests (node:test, offline)
         run: npm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (docker compose)
+        run: docker compose -f site/docker-compose.yml build
+
+      - name: Smoke test (up → /healthz → down)
+        run: |
+          # env_file 在 CI 不存在（.env 被 gitignore），建一个空文件走代码默认值即可
+          touch site/server/.env
+          docker compose -f site/docker-compose.yml up -d
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://localhost:8000/healthz >/dev/null 2>&1; then ok=1; echo "healthz OK after ${i}s"; break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8000/healthz
+          docker compose -f site/docker-compose.yml down -v
+          if [ "$ok" != "1" ]; then echo "SMOKE TEST FAILED"; exit 1; fi
