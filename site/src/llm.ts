@@ -823,8 +823,13 @@ export const LLM = (function () {
     try { return (localStorage.getItem("ppt_auth_role") || (window.Auth && window.Auth.role)) === "admin"; } catch { return false; }
   }
   async function fetchTraces(limit) {
-    const r = await fetch("/traces?limit=" + (limit || 200));
-    if (!r.ok) throw new Error("加载可观测数据失败 " + r.status);
+    const r = await fetch("/traces?limit=" + (limit || 200), {
+      headers: { ...(authToken() ? { "x-auth-token": authToken() } : {}) },
+    });
+    if (!r.ok) {
+      if (r.status === 401) throw new Error("请先登录后再查看调用记录");
+      throw new Error("加载可观测数据失败 " + r.status);
+    }
     return r.json();
   }
 

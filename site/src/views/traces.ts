@@ -4,10 +4,29 @@ import { esc } from "../core/ui.js";
 import { LLM } from "../llm.js";
 
 export async function traces(): Promise<void> {
+  // 调用记录涉及隐私：未登录直接拦在门前，显示登录引导（与「我的模板 / 我的发布」同口径）
+  if (!LLM.authIsAuthed()) {
+    ctx.appEl().innerHTML = `
+      <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
+      <h1 class="section-title" style="font-size:1.7rem;margin-top:8px;">🔍 可观测 / 调试</h1>
+      <div class="card tpl-card" style="margin-top:16px;text-align:center;">
+        <p class="muted">调用记录涉及隐私，需登录后查看。登录后：<b>管理员</b>可见全部记录，<b>普通用户</b>仅可见本人记录。</p>
+        <button id="tr-login" class="btn btn-primary btn-sm" style="margin-top:10px;">登录后查看</button>
+      </div>`;
+    const lb = (document.getElementById("tr-login") as HTMLButtonElement | null);
+    if (lb && (window as any).Auth && (window as any).Auth.ensure) {
+      lb.addEventListener("click", async () => {
+        const tok = await (window as any).Auth.ensure();
+        if (tok) traces();
+      });
+    }
+    return;
+  }
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
     <h1 class="section-title" style="font-size:1.7rem;margin-top:8px;">🔍 可观测 / 调试</h1>
     <p class="muted" style="font-size:.82rem;margin-top:6px;">每次生成 / 改写调用都会在本地落盘（与 LangSmith 云端互不冲突）。这里直接看到延迟、Token、各步骤与错误——这就是你之前加的 LangSmith 在应用内的体现。</p>
+    <div id="tr-scope" class="muted" style="font-size:.78rem;margin-top:6px;"></div>
     <div id="tr-summary" class="mt-3 flex gap-3 flex-wrap"></div>
     <div class="flex items-center gap-2 mt-3">
       <select id="tr-type" class="select" style="width:auto;">
@@ -27,12 +46,17 @@ export async function traces(): Promise<void> {
     wrap.innerHTML = "加载中…";
     try {
       const data = await LLM.fetchTraces(300);
+      const scope = data.scope; // "all"（管理员）/ "self"（普通用户）
+      const scopeEl = (document.getElementById("tr-scope") as HTMLElement | null);
+      if (scopeEl) scopeEl.innerHTML = scope === "all"
+        ? "当前为 <b>管理员</b> 视角：显示 <b>全部</b> 调用记录（含匿名调用）。"
+        : "当前视角：仅显示 <b>你本人</b> 的调用记录（匿名调用不可见）。";
       const typeFilter = (document.getElementById("tr-type") as HTMLSelectElement).value;
-      const traces = (data.traces || []).filter(t => !typeFilter || t.type === typeFilter);
+      const traces = (data.traces || []).filter((t: any) => !typeFilter || t.type === typeFilter);
       const total = traces.length;
-      const errs = traces.filter(t => t.status === "error").length;
-      const avgLat = total ? Math.round(traces.reduce((s, t) => s + (t.latencyMs || 0), 0) / total) : 0;
-      const tok = traces.reduce((s, t) => s + (t.totalTokens || 0), 0);
+      const errs = traces.filter((t: any) => t.status === "error").length;
+      const avgLat = total ? Math.round(traces.reduce((s: number, t: any) => s + (t.latencyMs || 0), 0) / total) : 0;
+      const tok = traces.reduce((s: number, t: any) => s + (t.totalTokens || 0), 0);
       const sum = (document.getElementById("tr-summary") as HTMLElement);
       if (sum) sum.innerHTML = [["总调用", total], ["错误", errs], ["平均延迟", (avgLat / 1000).toFixed(1) + "s"], ["累计 Token", tok]]
         .map((kv) => `<div class="pill" style="background:#f1f5f9;color:var(--slate);">${kv[0]}：<b>${kv[1]}</b></div>`).join("");
@@ -43,7 +67,12 @@ export async function traces(): Promise<void> {
         if (box) box.style.display = box.style.display === "none" ? "block" : "none";
       }));
     } catch (e) {
-      wrap.innerHTML = '<p class="muted">加载失败：' + esc((e as any).message) + '</p>';
+      const msg = ((e as any).message || "");
+      if (msg.indexOf("请先登录") >= 0) {
+        wrap.innerHTML = '<p class="muted">登录态已失效，请 <a href="#" onclick="location.reload();return false;">刷新页面重新登录</a> 后再查看。</p>';
+      } else {
+        wrap.innerHTML = '<p class="muted">加载失败：' + esc(msg) + '</p>';
+      }
     }
   }
   const refresh = (document.getElementById("tr-refresh") as HTMLButtonElement);
@@ -55,7 +84,7 @@ export async function traces(): Promise<void> {
 
 export function trCard(t: any): string {
   const time = new Date(t.createdAt).toLocaleString("zh-CN", { hour12: false });
-  const steps = (t.steps || []).map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s)}</span>`).join(" ");
+  const steps = (t.steps || []).map((s: string) => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s)}</span>`).join(" ");
   const statusBadge = t.status === "error" ? '<span class="pill pill-red">错误</span>' : '<span class="pill pill-green">成功</span>';
   return `<div class="card tpl-card" style="margin-top:12px;">
     <div class="flex items-center justify-between flex-wrap gap-2">

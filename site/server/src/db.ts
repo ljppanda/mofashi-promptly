@@ -565,6 +565,7 @@ export interface TraceEntry {
   status?: string;
   error?: string;
   steps: string[];
+  userId?: string | null;
 }
 
 export function recordTrace(e: {
@@ -577,22 +578,28 @@ export function recordTrace(e: {
   status?: string;
   error?: string;
   steps?: string[];
+  userId?: string | null;
 }): void {
   const id = (globalThis.crypto?.randomUUID?.() || ("t" + Date.now() + Math.random().toString(16).slice(2)));
   const u = e.usage || {};
   db.prepare(
-    `INSERT INTO traces(id,created_at,type,provider,model,preview,latency_ms,prompt_tokens,completion_tokens,total_tokens,status,error,steps)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO traces(id,created_at,type,provider,model,preview,latency_ms,prompt_tokens,completion_tokens,total_tokens,status,error,steps,user_id)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     id, Date.now(), e.type, e.provider || null, e.model || null,
     ((e.preview || "").slice(0, 200) || null),
     e.latencyMs ?? null, u.prompt_tokens ?? null, u.completion_tokens ?? null, u.total_tokens ?? null,
     e.status || "ok", e.error || null, JSON.stringify(e.steps || []),
+    e.userId ?? null,
   );
 }
 
-export function listTraces(limit = 200): TraceEntry[] {
-  const rows = db.prepare("SELECT * FROM traces ORDER BY created_at DESC LIMIT ?").all(Math.max(1, Math.min(1000, limit))) as any[];
+export function listTraces(limit = 200, userId?: string | null): TraceEntry[] {
+  const lim = Math.max(1, Math.min(1000, limit));
+  // 不传 userId（管理员）→ 全部；传入 → 仅该用户本人（匿名 trace 的 user_id 为 NULL，普通用户看不见）
+  const rows = userId
+    ? (db.prepare("SELECT * FROM traces WHERE user_id = ? ORDER BY created_at DESC LIMIT ?").all(userId, lim) as any[])
+    : (db.prepare("SELECT * FROM traces ORDER BY created_at DESC LIMIT ?").all(lim) as any[]);
   return rows.map((r: any) => {
     let steps: string[] = [];
     try { steps = JSON.parse(r.steps || "[]"); } catch { steps = []; }
@@ -600,7 +607,7 @@ export function listTraces(limit = 200): TraceEntry[] {
       id: r.id, createdAt: r.created_at, type: r.type, provider: r.provider, model: r.model,
       preview: r.preview, latencyMs: r.latency_ms, promptTokens: r.prompt_tokens,
       completionTokens: r.completion_tokens, totalTokens: r.total_tokens, status: r.status,
-      error: r.error, steps,
+      error: r.error, steps, userId: r.user_id ?? null,
     };
   });
 }

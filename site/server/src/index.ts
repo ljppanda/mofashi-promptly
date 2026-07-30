@@ -249,7 +249,7 @@ async function handleAgentGenerate(req: http.IncomingMessage, res: http.ServerRe
       events, ac.signal,
     );
   } finally {
-    recordTrace({ type: "生成模板", provider, model, preview: sentence, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordTrace({ type: "生成模板", provider, model, preview: sentence, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps, userId: authPayload(req)?.sub ?? null });
     recordGeneration(!tacc.error);
   }
   res.end();
@@ -293,7 +293,7 @@ async function handleAgentUse(req: http.IncomingMessage, res: http.ServerRespons
       events, ac.signal,
     );
   } finally {
-    recordTrace({ type: "生成提示词", provider, model, preview: goal, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordTrace({ type: "生成提示词", provider, model, preview: goal, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps, userId: authPayload(req)?.sub ?? null });
     recordGeneration(!tacc.error);
   }
   res.end();
@@ -338,7 +338,7 @@ async function handleAgentClarify(req: http.IncomingMessage, res: http.ServerRes
     // 极端兜底：任何未捕获错误都降级为"按原始目标继续生成"，绝不阻断主链路
     ev("result", { complete: true, enrichedGoal: goal, note: "clarify 异常，按原始目标继续" });
   } finally {
-    recordTrace({ type: "访谈澄清", provider, model, preview: goal, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordTrace({ type: "访谈澄清", provider, model, preview: goal, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps, userId: authPayload(req)?.sub ?? null });
   }
   ev("done", {});
   res.end();
@@ -383,7 +383,7 @@ async function handleAgentRefine(req: http.IncomingMessage, res: http.ServerResp
   } catch (err) {
     ev("error", { message: err instanceof Error ? err.message : String(err) });
   } finally {
-    recordTrace({ type: "改写提示词", provider, model, preview: feedback, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps });
+    recordTrace({ type: "改写提示词", provider, model, preview: feedback, latencyMs: Date.now() - t0, usage: tacc.usage, status: tacc.error ? "error" : "ok", error: tacc.error, steps: tacc.steps, userId: authPayload(req)?.sub ?? null });
     recordGeneration(!tacc.error);
   }
   ev("done", {});
@@ -640,11 +640,14 @@ async function handleCommunityReportResolve(req: http.IncomingMessage, res: http
   sendJSON(res, 200, { ok: true });
 }
 
-// 本地可观测：返回最近的 trace 列表
+// 本地可观测：返回调用记录。需登录——管理员看全部，普通用户只看本人，匿名 401。
 async function handleTraces(req: http.IncomingMessage, res: http.ServerResponse) {
+  const me = authPayload(req);
+  if (!me) return sendJSON(res, 401, { error: "请先登录后再查看调用记录" });
   const u = new URL(req.url ?? "/", "http://localhost");
   const limit = Number(u.searchParams.get("limit") || "200");
-  sendJSON(res, 200, { traces: listTraces(limit) });
+  const traces = me.role === "admin" ? listTraces(limit) : listTraces(limit, me.sub);
+  sendJSON(res, 200, { traces, scope: me.role === "admin" ? "all" : "self" });
 }
 
 // 运营指标（仅管理员可见）：多 LLM 服务健康度（成功率/延迟）、整体生成成功率、RAG 命中率、主备切换情况。

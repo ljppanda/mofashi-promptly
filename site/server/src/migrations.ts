@@ -104,9 +104,17 @@ export const MIGRATIONS: Migration[] = [
       db.exec(`CREATE INDEX IF NOT EXISTS idx_comments_item ON comments(item_id, created_at)`);
     },
   },
+  {
+    version: 3,
+    name: "traces_user_id_2026_07_30",
+    up: (db) => {
+      // 给 traces 补 user_id 列：记录调用者身份，支撑「用户只看自己的调用记录」（匿名留 NULL，仅管理员可见）
+      try { db.exec("ALTER TABLE traces ADD COLUMN user_id TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
+    },
+  },
   // 未来变更在此追加，例如：
   // {
-  //   version: 3,
+  //   version: 4,
   //   name: "add_community_flag",
   //   up: (db) => { db.exec("ALTER TABLE community ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0"); },
   // },

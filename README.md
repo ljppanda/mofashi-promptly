@@ -42,7 +42,7 @@
                             ├─ /agent        模板生成 Agent（LangGraph）
                             ├─ /relay        带白名单的 LLM 转发（SSRF 防护）
                             ├─ /community    社区（发布 / 评分 / 收藏 / 举报 / 审核台）
-                            ├─ /api/traces   可观测指标（ADMIN 鉴权）
+                            ├─ /traces       调用记录（需登录：管理员看全部 / 用户仅看本人）
                             ├─ rag           LlamaIndex + LanceDB 检索增强
                             └─ node:sqlite   单文件持久化（WAL + 版本化迁移）
 ```
