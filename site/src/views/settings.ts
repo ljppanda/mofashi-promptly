@@ -108,6 +108,7 @@ export function settings(): void {
     if (authLogoutBtn) authLogoutBtn.style.display = on ? "" : "none";
   };
   refreshAuthUI();
+  window.addEventListener("auth-changed", refreshAuthUI);
   if (authLoginBtn) authLoginBtn.addEventListener("click", async () => {
     const tok = await window.Auth!.ensure();
     if (tok) refreshAuthUI();

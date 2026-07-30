@@ -12,6 +12,8 @@ function applyAuth(r: any) {
     localStorage.setItem("ppt_auth_user", window.Auth!.username);
     localStorage.setItem("ppt_auth_role", window.Auth!.role);
   } catch { /* ignore */ }
+  // 通知所有监听登录态的视图刷新（注册/登录成功后界面立即同步）
+  try { window.dispatchEvent(new Event("auth-changed")); } catch { /* ignore */ }
 }
 
 function openLoginModal(): Promise<string | null> {
@@ -25,6 +27,7 @@ function openLoginModal(): Promise<string | null> {
         <input id="auth-user" class="input" style="margin-top:10px;" placeholder="用户名" autocomplete="username" />
         <input id="auth-pass" type="password" class="input" style="margin-top:8px;" placeholder="密码 / 管理员口令" autocomplete="current-password" />
         <div id="auth-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
+        <div class="muted" style="font-size:.76rem;margin-top:6px;"><a id="auth-forgot" href="javascript:;" style="color:#64748b;">忘记密码？</a></div>
         <div class="flex gap-2 mt-4 flex-wrap items-center">
           <button id="auth-ok" class="btn btn-primary btn-sm">登录</button>
           <button id="auth-cancel" class="btn btn-ghost btn-sm">取消</button>
@@ -39,6 +42,7 @@ function openLoginModal(): Promise<string | null> {
     const ok = (document.getElementById("auth-ok") as HTMLButtonElement);
     const cancel = (document.getElementById("auth-cancel") as HTMLButtonElement);
     const toReg = (document.getElementById("auth-to-reg") as HTMLAnchorElement);
+    const forgot = (document.getElementById("auth-forgot") as HTMLAnchorElement);
     const submit = async () => {
       const username = (userEl && userEl.value || "").trim();
       const pass = input.value;
@@ -59,6 +63,10 @@ function openLoginModal(): Promise<string | null> {
     cancel.addEventListener("click", () => { close(); resolve(null); });
     ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
     if (toReg) toReg.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openRegisterModal()); });
+    if (forgot) forgot.addEventListener("click", (e) => {
+      e.preventDefault();
+      toast("当前为本地账号，密码经 scrypt 加盐哈希存储、不可逆，无法重置。如需更换身份，请直接注册新账号。");
+    });
     setTimeout(() => { if (userEl) userEl.focus(); }, 30);
   });
 }
@@ -99,7 +107,7 @@ function openRegisterModal(): Promise<string | null> {
       try {
         const r = await LLM.authRegister(username, pass);
         applyAuth(r);
-        toast("✓ 注册成功，已自动登录");
+        toast("✓ 注册成功，已自动登录：" + (r.username || username));
         close(); resolve(r.token);
       } catch (e) {
         msg.textContent = e.message || "注册失败";
