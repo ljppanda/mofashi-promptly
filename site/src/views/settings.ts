@@ -19,6 +19,17 @@ export function settings(): void {
         <button id="auth-login-btn" class="btn btn-primary btn-sm">${LLM.authIsAuthed() ? "切换账号" : "登录 / 注册"}</button>
         <button id="auth-logout-btn" class="btn btn-ghost btn-sm" style="${LLM.authIsAuthed() ? "" : "display:none;"}">退出登录</button>
       </div>
+      <div id="change-pw-block" style="margin-top:14px;${LLM.authIsAuthed() && !LLM.isAdmin() ? "" : "display:none;"}">
+        <div class="ttl" style="font-size:.95rem;margin-bottom:8px;">🔑 修改密码</div>
+        <input id="pw-current" type="password" class="input" style="margin-bottom:6px;" placeholder="当前密码" autocomplete="current-password" />
+        <input id="pw-new" type="password" class="input" style="margin-bottom:6px;" placeholder="新密码（至少 8 位）" autocomplete="new-password" />
+        <input id="pw-new2" type="password" class="input" style="margin-bottom:6px;" placeholder="确认新密码" autocomplete="new-password" />
+        <div class="flex gap-2 items-center">
+          <button id="pw-save" class="btn btn-primary btn-sm">保存修改</button>
+          <span id="pw-msg" class="text-xs"></span>
+        </div>
+      </div>
+      <p id="change-pw-admin" class="text-xs muted mt-3" style="${LLM.authIsAuthed() && LLM.isAdmin() ? "" : "display:none;"}">管理员口令由服务端 <code style="background:#f1f5f9;padding:1px 5px;border-radius:5px;">APP_ADMIN_PASSPHRASE</code> 配置，无法在界面内修改。</p>
       <p class="text-xs muted mt-2">普通用户开放注册；管理员用服务端 <code style="background:#f1f5f9;padding:1px 5px;border-radius:5px;">.env</code> 的 APP_ADMIN_PASSPHRASE 口令登录（口令匹配也视为管理员）。账号仅用于社区身份与权限，模型 Key 仍保存在本机浏览器。</p>
     </div>
     <div class="card card-pad" style="max-width:560px;margin-top:16px;">
@@ -106,6 +117,10 @@ export function settings(): void {
     if (authState) authState.textContent = on ? (admin ? `已登录（管理员 ${who}）` : `已登录（${who}）`) : "未登录";
     if (authLoginBtn) authLoginBtn.textContent = on ? "切换账号" : "登录 / 注册";
     if (authLogoutBtn) authLogoutBtn.style.display = on ? "" : "none";
+    const pwBlock = (document.getElementById("change-pw-block") as HTMLElement);
+    const pwAdmin = (document.getElementById("change-pw-admin") as HTMLElement);
+    if (pwBlock) pwBlock.style.display = (on && !admin) ? "" : "none";
+    if (pwAdmin) pwAdmin.style.display = (on && admin) ? "" : "none";
   };
   refreshAuthUI();
   window.addEventListener("auth-changed", refreshAuthUI);
@@ -117,6 +132,29 @@ export function settings(): void {
     LLM.authLogout();
     refreshAuthUI();
     toast("已退出登录");
+  });
+
+  // 修改密码（登录后的普通用户）
+  const pwSave = (document.getElementById("pw-save") as HTMLButtonElement);
+  if (pwSave) pwSave.addEventListener("click", async () => {
+    const cur = (document.getElementById("pw-current") as HTMLInputElement);
+    const nw = (document.getElementById("pw-new") as HTMLInputElement);
+    const nw2 = (document.getElementById("pw-new2") as HTMLInputElement);
+    const msg = (document.getElementById("pw-msg") as HTMLElement);
+    const current = cur.value, next = nw.value, next2 = nw2.value;
+    if (!current || !next) { msg.textContent = "请填写当前密码与新密码"; msg.style.color = "#dc2626"; return; }
+    if (next !== next2) { msg.textContent = "两次新密码不一致"; msg.style.color = "#dc2626"; return; }
+    if (next.length < 8) { msg.textContent = "新密码至少 8 位"; msg.style.color = "#dc2626"; return; }
+    pwSave.disabled = true; pwSave.style.opacity = ".6"; msg.textContent = "保存中…"; msg.style.color = "#64748b";
+    try {
+      await LLM.authChangePassword(current, next);
+      msg.textContent = "✓ 密码已更新"; msg.style.color = "#16a34a";
+      cur.value = ""; nw.value = ""; nw2.value = "";
+    } catch (e) {
+      msg.textContent = "✗ " + ((e as any).message || e); msg.style.color = "#dc2626";
+    } finally {
+      pwSave.disabled = false; pwSave.style.opacity = "1";
+    }
   });
 
   // 读取当前表单值为覆盖参数，供测试连接使用（无需先保存）

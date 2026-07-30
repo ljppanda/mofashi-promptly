@@ -27,7 +27,10 @@ function openLoginModal(): Promise<string | null> {
         <input id="auth-user" class="input" style="margin-top:10px;" placeholder="用户名" autocomplete="username" />
         <input id="auth-pass" type="password" class="input" style="margin-top:8px;" placeholder="密码 / 管理员口令" autocomplete="current-password" />
         <div id="auth-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
-        <div class="muted" style="font-size:.76rem;margin-top:6px;"><a id="auth-forgot" href="javascript:;" style="color:#64748b;">忘记密码？</a></div>
+        <div class="flex gap-2 mt-1 flex-wrap items-center" style="font-size:.76rem;">
+          <a id="auth-forgot" href="javascript:;" style="color:#64748b;">忘记密码？</a>
+          <span class="muted" style="margin-left:auto;color:#94a3b8;">密码经 scrypt 加盐哈希存储、不可逆</span>
+        </div>
         <div class="flex gap-2 mt-4 flex-wrap items-center">
           <button id="auth-ok" class="btn btn-primary btn-sm">登录</button>
           <button id="auth-cancel" class="btn btn-ghost btn-sm">取消</button>
@@ -63,10 +66,7 @@ function openLoginModal(): Promise<string | null> {
     cancel.addEventListener("click", () => { close(); resolve(null); });
     ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
     if (toReg) toReg.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openRegisterModal()); });
-    if (forgot) forgot.addEventListener("click", (e) => {
-      e.preventDefault();
-      toast("当前为本地账号，密码经 scrypt 加盐哈希存储、不可逆，无法重置。如需更换身份，请直接注册新账号。");
-    });
+    if (forgot) forgot.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openForgotModal()); });
     setTimeout(() => { if (userEl) userEl.focus(); }, 30);
   });
 }
@@ -78,8 +78,9 @@ function openRegisterModal(): Promise<string | null> {
     ov.innerHTML = `
       <div class="modal-card card" style="max-width:380px;">
         <div class="ttl">📝 注册账号</div>
-        <p class="slate" style="margin-top:10px;line-height:1.6;font-size:.85rem;">用户名 3-30 位（字母/数字/下划线/中文），密码至少 8 位。</p>
+        <p class="slate" style="margin-top:10px;line-height:1.6;font-size:.85rem;">用户名 3-30 位（字母/数字/下划线/中文），密码至少 8 位，邮箱用于找回密码。</p>
         <input id="reg-user" class="input" style="margin-top:10px;" placeholder="用户名" autocomplete="username" />
+        <input id="reg-email" type="email" class="input" style="margin-top:8px;" placeholder="邮箱（用于找回密码）" autocomplete="email" />
         <input id="reg-pass" type="password" class="input" style="margin-top:8px;" placeholder="密码（至少 8 位）" autocomplete="new-password" />
         <input id="reg-pass2" type="password" class="input" style="margin-top:8px;" placeholder="确认密码" autocomplete="new-password" />
         <div id="reg-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
@@ -92,6 +93,7 @@ function openRegisterModal(): Promise<string | null> {
     document.body.appendChild(ov);
     const close = () => ov.remove();
     const userEl = (document.getElementById("reg-user") as HTMLInputElement);
+    const emailEl = (document.getElementById("reg-email") as HTMLInputElement);
     const passEl = (document.getElementById("reg-pass") as HTMLInputElement);
     const pass2El = (document.getElementById("reg-pass2") as HTMLInputElement);
     const msg = (document.getElementById("reg-msg") as HTMLElement);
@@ -100,12 +102,14 @@ function openRegisterModal(): Promise<string | null> {
     const toLogin = (document.getElementById("reg-to-login") as HTMLAnchorElement);
     const submit = async () => {
       const username = (userEl && userEl.value || "").trim();
+      const email = (emailEl && emailEl.value || "").trim().toLowerCase();
       const pass = passEl.value;
       const pass2 = pass2El.value;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = "请输入有效邮箱"; return; }
       if (pass !== pass2) { msg.textContent = "两次密码不一致"; return; }
       ok.disabled = true; ok.style.opacity = ".6";
       try {
-        const r = await LLM.authRegister(username, pass);
+        const r = await LLM.authRegister(username, pass, email);
         applyAuth(r);
         toast("✓ 注册成功，已自动登录：" + (r.username || username));
         close(); resolve(r.token);
@@ -115,11 +119,106 @@ function openRegisterModal(): Promise<string | null> {
       }
     };
     ok.addEventListener("click", submit);
-    [userEl, passEl, pass2El].forEach((el) => { if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); });
+    [userEl, emailEl, passEl, pass2El].forEach((el) => { if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); });
     cancel.addEventListener("click", () => { close(); resolve(null); });
     ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
     if (toLogin) toLogin.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openLoginModal()); });
     setTimeout(() => { if (userEl) userEl.focus(); }, 30);
+  });
+}
+
+// 「忘记密码？」：填邮箱 → 后端发重置链接（枚举防护，统一提示）。
+export function openForgotModal(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `
+      <div class="modal-card card" style="max-width:380px;">
+        <div class="ttl">🔑 找回密码</div>
+        <p class="slate" style="margin-top:10px;line-height:1.6;font-size:.85rem;">输入注册邮箱，我们将发送一封含重置链接的邮件（30 分钟内有效）。</p>
+        <input id="f-email" type="email" class="input" style="margin-top:10px;" placeholder="注册邮箱" autocomplete="email" />
+        <div id="f-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
+        <div class="flex gap-2 mt-4 flex-wrap items-center">
+          <button id="f-ok" class="btn btn-primary btn-sm">发送重置邮件</button>
+          <button id="f-cancel" class="btn btn-ghost btn-sm">取消</button>
+          <a id="f-to-login" href="javascript:;" style="margin-left:auto;font-size:.8rem;">返回登录</a>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    const emailEl = (document.getElementById("f-email") as HTMLInputElement);
+    const msg = (document.getElementById("f-msg") as HTMLElement);
+    const ok = (document.getElementById("f-ok") as HTMLButtonElement);
+    const cancel = (document.getElementById("f-cancel") as HTMLButtonElement);
+    const toLogin = (document.getElementById("f-to-login") as HTMLAnchorElement);
+    const submit = async () => {
+      const email = (emailEl && emailEl.value || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = "请输入有效邮箱"; return; }
+      ok.disabled = true; ok.style.opacity = ".6"; msg.textContent = "发送中…"; msg.style.color = "#64748b";
+      try {
+        const r = await LLM.authForgotPassword(email);
+        msg.style.color = "#16a34a";
+        msg.textContent = (r && r.message) || "若该邮箱已注册，重置链接已发送，请查收邮件。";
+        ok.textContent = "已发送"; ok.disabled = true;
+      } catch (e) {
+        msg.style.color = "#dc2626";
+        msg.textContent = (e && (e as any).message) || "请求失败";
+        ok.disabled = false; ok.style.opacity = "1";
+      }
+    };
+    ok.addEventListener("click", submit);
+    if (emailEl) emailEl.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
+    cancel.addEventListener("click", () => { close(); resolve(null); });
+    ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
+    if (toLogin) toLogin.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openLoginModal()); });
+    setTimeout(() => { if (emailEl) emailEl.focus(); }, 30);
+  });
+}
+
+// 凭邮件里的 token 设置新密码。token 来自 URL（?token=...），由 app.ts 启动时发现并调用。
+export function openResetModal(token: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `
+      <div class="modal-card card" style="max-width:380px;">
+        <div class="ttl">🔑 设置新密码</div>
+        <p class="slate" style="margin-top:10px;line-height:1.6;font-size:.85rem;">请输入新密码（至少 8 位）。</p>
+        <input id="r-pass" type="password" class="input" style="margin-top:10px;" placeholder="新密码（至少 8 位）" autocomplete="new-password" />
+        <input id="r-pass2" type="password" class="input" style="margin-top:8px;" placeholder="确认新密码" autocomplete="new-password" />
+        <div id="r-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
+        <div class="flex gap-2 mt-4 flex-wrap items-center">
+          <button id="r-ok" class="btn btn-primary btn-sm">重置密码</button>
+          <button id="r-cancel" class="btn btn-ghost btn-sm">取消</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    const passEl = (document.getElementById("r-pass") as HTMLInputElement);
+    const pass2El = (document.getElementById("r-pass2") as HTMLInputElement);
+    const msg = (document.getElementById("r-msg") as HTMLElement);
+    const ok = (document.getElementById("r-ok") as HTMLButtonElement);
+    const cancel = (document.getElementById("r-cancel") as HTMLButtonElement);
+    const submit = async () => {
+      const pass = passEl.value;
+      const pass2 = pass2El.value;
+      if (pass.length < 8) { msg.textContent = "新密码至少 8 位"; return; }
+      if (pass !== pass2) { msg.textContent = "两次密码不一致"; return; }
+      ok.disabled = true; ok.style.opacity = ".6";
+      try {
+        await LLM.authResetPassword(token, pass);
+        toast("✓ 密码已重置，请用新密码登录");
+        close(); resolve(openLoginModal());
+      } catch (e) {
+        msg.textContent = (e && (e as any).message) || "重置失败";
+        ok.disabled = false; ok.style.opacity = "1";
+      }
+    };
+    ok.addEventListener("click", submit);
+    [passEl, pass2El].forEach((el) => { if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); }); });
+    cancel.addEventListener("click", () => { close(); resolve(null); });
+    ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
+    setTimeout(() => { if (passEl) passEl.focus(); }, 30);
   });
 }
 

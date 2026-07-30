@@ -112,6 +112,25 @@ export const MIGRATIONS: Migration[] = [
       try { db.exec("ALTER TABLE traces ADD COLUMN user_id TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
     },
   },
+  {
+    version: 4,
+    name: "email_and_password_reset_2026_07_30",
+    up: (db) => {
+      // 用户表加邮箱（用于标准邮箱重置密码链路）
+      try { db.exec("ALTER TABLE users ADD COLUMN email TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
+      // 密码重置令牌表：单次使用 + 时效。token_hash 存 SHA-256，原始令牌只在邮件链接里出现一次。
+      db.exec(`CREATE TABLE IF NOT EXISTS password_resets(
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_pwreset_hash ON password_resets(token_hash)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_pwreset_user ON password_resets(user_id, created_at)`);
+    },
+  },
   // 未来变更在此追加，例如：
   // {
   //   version: 4,

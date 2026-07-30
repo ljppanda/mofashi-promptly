@@ -12,7 +12,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./logger.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createUser, getUserByUsername, getUserById, userExists } from "./db.js";
+import { createUser, getUserByUsername, getUserById, userExists, updateUserPassword, getUserByEmail, emailExists, createResetToken, getValidResetToken, consumeResetToken } from "./db.js";
+import { sendPasswordResetEmail, buildResetLink } from "./mailer.js";
+import { LIMITS } from "./validate.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.resolve(__dirname, "..", "data");
@@ -168,20 +170,85 @@ export async function handleAuthLogin(req: IncomingMessage, res: ServerResponse)
   return sendJSON(res, 200, issueToken(u.id, u.role, u.username));
 }
 
-/** POST /api/auth/register  { username, password } → 创建普通用户并自动登录 */
+/** POST /api/auth/register  { username, password, email } → 创建普通用户并自动登录 */
 export async function handleAuthRegister(req: IncomingMessage, res: ServerResponse) {
   const raw = await readBody(req);
   let p: any;
   try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
   const username = String(p.username || "").trim();
   const password = String(p.password || "");
+  const email = String(p.email || "").trim().toLowerCase();
   if (!/^[\w一-龥]{3,30}$/.test(username)) return sendJSON(res, 400, { error: "用户名需 3-30 位（字母/数字/下划线/中文）" });
   if (username.toLowerCase() === "admin") return sendJSON(res, 400, { error: "该用户名保留" });
   if (password.length < 8) return sendJSON(res, 400, { error: "密码至少 8 位" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJSON(res, 400, { error: "邮箱格式不正确" });
+  if (email.length > LIMITS.EMAIL) return sendJSON(res, 400, { error: "邮箱过长" });
   if (userExists(username)) return sendJSON(res, 409, { error: "用户名已存在" });
+  if (emailExists(email)) return sendJSON(res, 409, { error: "该邮箱已注册" });
   const salt = makeSalt();
-  const u = createUser(username, hashPassword(password, salt), salt, "user");
+  const u = createUser(username, hashPassword(password, salt), salt, "user", email);
   return sendJSON(res, 200, issueToken(u.id, u.role, u.username));
+}
+
+/** POST /api/auth/change-password { current, next } → 已登录普通用户修改自己的密码（需有效令牌） */
+export async function handleAuthChangePassword(req: IncomingMessage, res: ServerResponse) {
+  const p = authPayload(req);
+  if (!p) return sendJSON(res, 401, { error: "请先登录" });
+  // 管理员是虚拟身份（由服务端口令登录），没有 users 行，密码无法在此修改
+  if (p.sub === "admin") return sendJSON(res, 400, { error: "管理员口令由服务器配置（APP_ADMIN_PASSPHRASE），请在服务端环境变量修改，无法在界面内更改" });
+  const raw = await readBody(req);
+  let b: any;
+  try { b = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
+  const current = String(b.current || "");
+  const next = String(b.next || "");
+  if (next.length < 8) return sendJSON(res, 400, { error: "新密码至少 8 位" });
+  const u = getUserById(p.sub);
+  if (!u || u.status !== "active") return sendJSON(res, 404, { error: "用户不存在或已停用" });
+  const full = getUserByUsername(u.username);
+  if (!full || !verifyPassword(current, full.salt, full.passHash)) return sendJSON(res, 401, { error: "当前密码错误" });
+  const salt = makeSalt();
+  updateUserPassword(u.id, hashPassword(next, salt), salt);
+  return sendJSON(res, 200, { ok: true });
+}
+
+/** POST /api/auth/forgot-password { email } → 标准邮箱重置：发带时效令牌的链接。
+ *  枚举防护：无论邮箱是否存在/格式对错，统一返回相同成功提示，不泄露账号是否存在。 */
+export async function handleAuthForgotPassword(req: IncomingMessage, res: ServerResponse) {
+  const okMsg = { ok: true, message: "若该邮箱已注册，重置链接已发送，请查收邮件（30 分钟内有效）。" };
+  const raw = await readBody(req);
+  let p: any;
+  try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 200, okMsg); }
+  const email = String(p.email || "").trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return sendJSON(res, 200, okMsg); // 格式不对也静默返回，避免被探
+  const u = getUserByEmail(email);
+  if (u && u.status === "active") {
+    const rawTok = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawTok).digest("hex");
+    createResetToken(u.id, tokenHash, Date.now() + 30 * 60 * 1000);
+    const link = buildResetLink(rawTok, req);
+    await sendPasswordResetEmail(email, link);
+  }
+  return sendJSON(res, 200, okMsg);
+}
+
+/** POST /api/auth/reset-password { token, next } → 凭有效令牌设置新密码（令牌单次使用 + 时效）。 */
+export async function handleAuthResetPassword(req: IncomingMessage, res: ServerResponse) {
+  const raw = await readBody(req);
+  let p: any;
+  try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
+  const token = String(p.token || "");
+  const next = String(p.next || "");
+  if (next.length < 8) return sendJSON(res, 400, { error: "新密码至少 8 位" });
+  if (!token) return sendJSON(res, 400, { error: "重置令牌缺失" });
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  const rec = getValidResetToken(tokenHash);
+  if (!rec) return sendJSON(res, 400, { error: "重置链接无效或已过期，请重新申请" });
+  const u = getUserById(rec.userId);
+  if (!u || u.status !== "active") { consumeResetToken(tokenHash); return sendJSON(res, 400, { error: "账户不可用" }); }
+  const salt = makeSalt();
+  updateUserPassword(u.id, hashPassword(next, salt), salt);
+  consumeResetToken(tokenHash);
+  return sendJSON(res, 200, { ok: true });
 }
 
 /** GET /api/auth/me → 当前登录身份（角色/用户名） */

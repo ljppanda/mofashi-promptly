@@ -825,14 +825,45 @@ export const LLM = (function () {
     }
     return r.json(); // { token, role, username, expiresAt }
   }
-  async function authRegister(username, password) {
-    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) });
+  async function authRegister(username, password, email) {
+    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, email }) });
     if (!r.ok) {
       let m = "注册失败 " + r.status;
       try { const j = await r.json(); if (j && j.error) m = j.error; } catch { /* ignore */ }
       throw new Error(m);
     }
     return r.json(); // { token, role, username, expiresAt }
+  }
+  async function authForgotPassword(email) {
+    const r = await fetch("/api/auth/forgot-password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+    if (!r.ok) {
+      let m = "请求失败 " + r.status;
+      try { const j = await r.json(); if (j && j.error) m = j.error; } catch { /* ignore */ }
+      throw new Error(m);
+    }
+    return r.json(); // { ok, message }
+  }
+  async function authResetPassword(token, next) {
+    const r = await fetch("/api/auth/reset-password", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token, next }) });
+    if (!r.ok) {
+      let m = "重置失败 " + r.status;
+      try { const j = await r.json(); if (j && j.error) m = j.error; } catch { /* ignore */ }
+      throw new Error(m);
+    }
+    return r.json(); // { ok: true }
+  }
+  async function authChangePassword(current, next) {
+    const r = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-auth-token": authToken() || "" },
+      body: JSON.stringify({ current, next }),
+    });
+    if (!r.ok) {
+      let m = "修改失败 " + r.status;
+      try { const j = await r.json(); if (j && j.error) m = j.error; } catch { /* ignore */ }
+      throw new Error(m);
+    }
+    return r.json(); // { ok: true }
   }
   function authLogout() {
     try { localStorage.removeItem("ppt_auth"); localStorage.removeItem("ppt_auth_user"); localStorage.removeItem("ppt_auth_role"); } catch { /* ignore */ }
@@ -855,5 +886,5 @@ export const LLM = (function () {
     return r.json();
   }
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authChangePassword, authForgotPassword, authResetPassword, authLogout, authIsAuthed, isAdmin };
 })();

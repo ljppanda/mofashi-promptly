@@ -17,6 +17,7 @@ export const LIMITS = {
   ID: 100,             // 各类 id
   INDUSTRY: 50,        // 行业
   PROXY_BASE: 300,     // 代理 base URL
+  EMAIL: 254,          // 邮箱（RFC 5321 上限）
 } as const;
 
 // 对指定字段做长度/规模校验；字符串按字符数，对象/数组按 JSON 序列化长度近似。

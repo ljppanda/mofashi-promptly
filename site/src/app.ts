@@ -4,7 +4,7 @@
 //   views/  —— Component(各页面) + Factory(ctx 工厂) + Router(本文件)
 // 具体渲染逻辑都在各视图模块，本文件不承载业务细节。
 import "./tailwind.css"; // 构建期编译的 Tailwind 工具类（替代 cdn.tailwindcss.com 运行时依赖）
-import "./core/auth.js"; // 副作用：初始化 window.Auth 登录态（设置页 / 社区写操作依赖）
+import { openResetModal } from "./core/auth.js"; // 副作用：初始化 window.Auth 登录态（设置页 / 社区写操作依赖）+ 导出重置弹窗
 
 import { ctx } from "./core/ctx.js";
 import { home, industry } from "./views/home.js";
@@ -49,3 +49,9 @@ window.goBack = ctx.goBack;
 const navImport = document.getElementById("nav-import");
 if (navImport) navImport.addEventListener("click", openImportFile);
 route();
+// 密码重置：邮件链接携带 ?token=...，启动时发现则直接打开重置弹窗；并清掉 URL 里的令牌避免刷新重开
+const resetToken = new URLSearchParams(location.search).get("token");
+if (resetToken) {
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch { /* ignore */ }
+  openResetModal(resetToken);
+}

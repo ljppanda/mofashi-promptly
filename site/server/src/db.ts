@@ -479,38 +479,68 @@ export interface UserRow {
   id: string;
   username: string;
   role: string;
+  email: string | null;
   createdAt: number;
   status: string;
 }
 
-export function createUser(username: string, passHash: string, salt: string, role = "user"): UserRow {
+export function createUser(username: string, passHash: string, salt: string, role = "user", email: string | null = null): UserRow {
   const id = "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  db.prepare("INSERT INTO users(id,username,pass_hash,salt,role,created_at,status) VALUES(?,?,?,?,?,?,'active')")
-    .run(id, username, passHash, salt, role, Date.now());
+  db.prepare("INSERT INTO users(id,username,pass_hash,salt,role,email,created_at,status) VALUES(?,?,?,?,?,?,?,'active')")
+    .run(id, username, passHash, salt, role, email, Date.now());
   return getUserById(id)!;
 }
 export function getUserByUsername(username: string): (UserRow & { passHash: string; salt: string }) | null {
-  const r = db.prepare("SELECT id,username,pass_hash,salt,role,created_at,status FROM users WHERE username = ?").get(username) as any;
+  const r = db.prepare("SELECT id,username,pass_hash,salt,role,email,created_at,status FROM users WHERE username = ?").get(username) as any;
   if (!r) return null;
-  return { id: r.id, username: r.username, role: r.role, createdAt: r.created_at, status: r.status, passHash: r.pass_hash, salt: r.salt };
+  return { id: r.id, username: r.username, role: r.role, email: r.email ?? null, createdAt: r.created_at, status: r.status, passHash: r.pass_hash, salt: r.salt };
+}
+export function getUserByEmail(email: string): UserRow | null {
+  const r = db.prepare("SELECT id,username,role,email,created_at,status FROM users WHERE email = ?").get(email.toLowerCase()) as any;
+  if (!r) return null;
+  return { id: r.id, username: r.username, role: r.role, email: r.email ?? null, createdAt: r.created_at, status: r.status };
+}
+export function emailExists(email: string): boolean {
+  return !!db.prepare("SELECT 1 FROM users WHERE email = ?").get(email.toLowerCase());
 }
 export function getUserById(id: string): UserRow | null {
-  const r = db.prepare("SELECT id,username,role,created_at,status FROM users WHERE id = ?").get(id) as any;
+  const r = db.prepare("SELECT id,username,role,email,created_at,status FROM users WHERE id = ?").get(id) as any;
   if (!r) return null;
-  return { id: r.id, username: r.username, role: r.role, createdAt: r.created_at, status: r.status };
+  return { id: r.id, username: r.username, role: r.role, email: r.email ?? null, createdAt: r.created_at, status: r.status };
 }
 export function userExists(username: string): boolean {
   return !!db.prepare("SELECT 1 FROM users WHERE username = ?").get(username);
 }
 export function listUsers(limit = 200): UserRow[] {
-  const rows = db.prepare("SELECT id,username,role,created_at,status FROM users ORDER BY created_at DESC LIMIT ?").all(Math.max(1, Math.min(1000, limit))) as any[];
-  return rows.map((r: any) => ({ id: r.id, username: r.username, role: r.role, createdAt: r.created_at, status: r.status }));
+  const rows = db.prepare("SELECT id,username,role,email,created_at,status FROM users ORDER BY created_at DESC LIMIT ?").all(Math.max(1, Math.min(1000, limit))) as any[];
+  return rows.map((r: any) => ({ id: r.id, username: r.username, role: r.role, email: r.email ?? null, createdAt: r.created_at, status: r.status }));
 }
 export function deleteUser(id: string): void {
   db.prepare("DELETE FROM users WHERE id = ?").run(id);
 }
 export function setUserRole(id: string, role: string): void {
   db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
+}
+export function updateUserPassword(id: string, passHash: string, salt: string): void {
+  db.prepare("UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?").run(passHash, salt, id);
+}
+
+// 密码重置令牌：单次使用 + 时效。原始令牌只出现在邮件链接里，库里只存 SHA-256。
+export function createResetToken(userId: string, tokenHash: string, expiresAt: number): void {
+  const id = "pr" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  db.prepare("INSERT INTO password_resets(id,user_id,token_hash,expires_at,used,created_at) VALUES(?,?,?,?,0,?)")
+    .run(id, userId, tokenHash, expiresAt, Date.now());
+}
+// 取一条「有效」令牌：存在 + 未使用 + 未过期。无效返回 null（不泄露是否存在）。
+export function getValidResetToken(tokenHash: string): { userId: string } | null {
+  const r = db.prepare("SELECT user_id, expires_at, used FROM password_resets WHERE token_hash = ?").get(tokenHash) as any;
+  if (!r) return null;
+  if (r.used) return null;
+  if (Date.now() > r.expires_at) return null;
+  return { userId: r.user_id };
+}
+export function consumeResetToken(tokenHash: string): void {
+  db.prepare("UPDATE password_resets SET used = 1 WHERE token_hash = ?").run(tokenHash);
 }
 
 // =====================================================================

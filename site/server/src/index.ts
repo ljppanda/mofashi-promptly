@@ -21,7 +21,7 @@ import {
   recordTrace, listTraces, closeDb,
 } from "./db.js";
 import {
-  handleAuthLogin, handleAuthMe, handleAuthRegister,
+  handleAuthLogin, handleAuthMe, handleAuthRegister, handleAuthChangePassword, handleAuthForgotPassword, handleAuthResetPassword,
   verifyRequestToken, verifyAdminToken, authPayload,
 } from "./auth.js";
 import { moderateContent } from "./moderation.js";
@@ -692,6 +692,14 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/api/auth/register") && req.method === "POST") return handleAuthRegister(req, res);
   if (url.startsWith("/api/auth/login") && req.method === "POST") return handleAuthLogin(req, res);
   if (url.startsWith("/api/auth/me") && req.method === "GET") return handleAuthMe(req, res);
+  if (url.startsWith("/api/auth/change-password") && req.method === "POST") return handleAuthChangePassword(req, res);
+  // 忘记密码：每 IP 每小时最多 5 次，防邮件轰炸 / 枚举探测
+  if (url.startsWith("/api/auth/forgot-password") && req.method === "POST") {
+    const rlF = rateLimit("forgot:" + ip, Number(process.env.RL_FORGOT_LIMIT ?? 5), Number(process.env.RL_FORGOT_WINDOW ?? 3600000));
+    if (!rlF.ok) return sendJSON(res, 429, { error: "请求过于频繁，请稍后再试", retryAfter: rlF.retryAfter });
+    return handleAuthForgotPassword(req, res);
+  }
+  if (url.startsWith("/api/auth/reset-password") && req.method === "POST") return handleAuthResetPassword(req, res);
 
   // 普通用户闸门：已登录即可（发布/评分/使用/收藏/举报/删除草稿）
   const USER_GUARDED = [
