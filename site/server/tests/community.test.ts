@@ -32,6 +32,10 @@ function seed(mod: any, rows: { id: string; title: string; industry: string; pro
   }
 }
 
+// 空库时 db.ts 会在导入阶段自动注入 8 条官方种子（id 以 seed- 开头）。排序类断言只关心
+// 本测试夹具的相对顺序，故先剥离种子行，避免生产种子干扰测试不变量。
+const stripSeeds = (arr: any[]) => arr.map((x: any) => x.id).filter((id: string) => !id.startsWith("seed-"));
+
 // ---------------- 搜索 ----------------
 test("community: 搜索 q 命中标题/正文/标签", async () => {
   const { mod, file } = await freshDb();
@@ -77,7 +81,7 @@ test("community: rating 排序按平均分降序", async () => {
       { id: "mid", title: "中分", industry: "法律", prompt: "p", tags: [], rating: 3 },
     ]);
     const r = mod.listCommunity({ sort: "rating" });
-    assert.deepEqual(r.map((x: any) => x.id), ["high", "mid", "low"]);
+    assert.deepEqual(stripSeeds(r), ["high", "mid", "low"]);
   } finally {
     cleanup(mod, file);
   }
@@ -92,7 +96,7 @@ test("community: heat 排序按 使用+收藏*2+评分 降序", async () => {
       { id: "warm", title: "温", industry: "法律", prompt: "p", tags: [], uses: 5 },
     ]);
     const r = mod.listCommunity({ sort: "heat" });
-    assert.deepEqual(r.map((x: any) => x.id), ["hot", "warm", "cold"]);
+    assert.deepEqual(stripSeeds(r), ["hot", "warm", "cold"]);
   } finally {
     cleanup(mod, file);
   }
