@@ -687,6 +687,23 @@ export const LLM = (function () {
     return { prompt: promptPart };
   }
 
+  // F13 自动优化闭环：基于「评测结论」(critique) 针对性改写提示词。浏览器直连，支持 over 指定模型与 signal 中断。
+  async function optimizePrompt(origPrompt, critique, onToken, signal, over = {}) {
+    const c = resolveCfg(over);
+    if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
+    const system = `你是一名「提示词优化器」。根据用户给出的【原提示词】与【评测结论】（低分维度与改进建议），对提示词做【针对性改写】，输出改进后的【完整提示词全文】。
+改写原则：
+1. 保留原提示词中好的部分（角色设定、有用结构、有效约束），不要推倒重来。
+2. 针对评测结论里的每条问题逐一改进（如"回答太啰嗦"就加强"只输出要点、避免铺垫"；"没按格式输出"就强化输出格式并给示例；"没抓住重点"就明确任务优先级与目标；"语气不对"就调整角色语气设定）。
+3. 改进要可操作、具体到措辞，而非空泛建议。
+4. 只输出改进后的【完整提示词正文】，不要任何解释、不要 markdown 代码块围栏、不要在开头写"以下是…"。`;
+    const user = `【原提示词】\n${origPrompt}\n\n【评测结论】\n${critique}`;
+    const r = await callChatStream(system, user, onToken || null, over, signal);
+    const prompt = (r.text || "").trim();
+    if (!prompt) throw new Error("优化未返回提示词");
+    return { prompt };
+  }
+
   // 社区分享（M18）客户端
   // 写操作需携带会话令牌（window.Auth）。令牌缺失/失效时由 window.Auth.ensure() 弹出口令登录并重试一次。
   function authToken() {
@@ -833,5 +850,5 @@ export const LLM = (function () {
     return r.json();
   }
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authLogout, authIsAuthed, isAdmin };
 })();

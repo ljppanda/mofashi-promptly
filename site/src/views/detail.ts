@@ -9,6 +9,7 @@ import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
 import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "./refine.js";
 import { openPublishForm } from "./community.js";
 import { openCompareModal } from "./compare.js";
+import { openOptimizeModal } from "./optimize.js";
 
 // 模板稳定 id：优先 slug（内置/导入/生成），其次 id
 function tplId(t: any): string | null {
@@ -106,6 +107,7 @@ export function detail(slug: string): void {
         <button id="use-stop" class="btn btn-danger" style="display:none">■ 停止</button>
         <button id="save-btn" class="btn btn-ghost">${isMine ? "★ 已收藏" : "☆ 收藏到我的模板"}</button>
         ${canEdit ? '<button id="hist-btn" class="btn btn-ghost btn-sm">🕑 历史版本</button>' : ""}
+        ${canEdit ? '<button id="opt-btn" class="btn btn-ghost btn-sm">🔧 一键优化</button>' : ""}
         <button id="dl-tpl-btn" class="btn btn-ghost btn-sm">下载此模板</button>
       </div>
       <div id="use-clarify" style="margin-top:14px;display:none;"></div>
@@ -247,6 +249,8 @@ export function detail(slug: string): void {
     });
     const histBtn = (document.getElementById("hist-btn") as HTMLButtonElement);
     if (histBtn) histBtn.addEventListener("click", openHistory);
+    const optBtn = (document.getElementById("opt-btn") as HTMLButtonElement);
+    if (optBtn) optBtn.addEventListener("click", () => openOptimizeModal(ctx.current));
   }
   const compareBtn = (document.getElementById("use-compare") as HTMLButtonElement);
   if (compareBtn) compareBtn.addEventListener("click", () => {
