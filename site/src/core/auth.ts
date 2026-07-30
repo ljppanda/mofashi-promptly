@@ -58,7 +58,7 @@ function openLoginModal(): Promise<string | null> {
     if (userEl) userEl.addEventListener("keydown", (e) => { if (e.key === "Enter") submit(); });
     cancel.addEventListener("click", () => { close(); resolve(null); });
     ov.addEventListener("click", (e) => { if (e.target === ov) { close(); resolve(null); } });
-    if (toReg) toReg.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openLoginModal()); });
+    if (toReg) toReg.addEventListener("click", (e) => { e.preventDefault(); close(); resolve(openRegisterModal()); });
     setTimeout(() => { if (userEl) userEl.focus(); }, 30);
   });
 }
