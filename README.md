@@ -114,6 +114,30 @@ cd site/server && npm install && npm start  # 后端自动托管 dist
 docker compose up -d --build
 ```
 
+### 快速部署 Checklist（公网发布）
+
+下面是从零把服务跑在公网的最小步骤；所有密钥都写在 `site/server/.env`（由 `.env.example` 复制而来，已被 `.gitignore` 忽略，**不会进仓库**）。
+
+1. **准备服务器**：一台装好 Docker + docker compose 的云服务器；把域名 `A` 记录解析到服务器 IP。
+2. **取代码**：`git clone git@github.com:ljppanda/mofashi-promptly.git && cd mofashi-promptly/site`
+3. **写配置**：`cp server/.env.example server/.env`，编辑 `.env` 至少填：
+   - `APP_ADMIN_PASSPHRASE=...`（**必填**：后台审核台 / 下架 / metrics 登录口令）
+   - `RESEND_API_KEY` / `RESEND_FROM` / `APP_PUBLIC_URL`（**邮箱重置必填**：三项都不填则走 dev 降级，只把重置链接打印到容器日志并落盘 `server/data/dev-reset-links.log`，用户收不到邮件）
+   - `APP_CORS_ORIGIN=https://你的域名`（前端走独立域名 / 反代时填前端源；同源部署可不设）
+   - 其余按需：`LLM_FALLBACK_*`、`MODERATION_*`、`SENTRY_DSN`、`RAG_EMBEDDING` 等（详见 `.env.example` 注释）
+4. **构建并启动**：`docker compose up -d --build`
+5. **验证**：`curl https://你的域名/healthz` 返回 `ok`；打开站点注册一个账号，实测一次「忘记密码」——生产链路用户会收到邮件，dev 降级则链接出现在 `docker compose logs` 与 `server/data/dev-reset-links.log`。
+6. **HTTPS（TLS）**：在容器前放 Caddy / Nginx 反代 80/443。最小 Caddy 片段（自动签发证书）：
+   ```caddyfile
+   # Caddyfile
+   your-domain.com {
+       reverse_proxy localhost:8000
+   }
+   ```
+7. **数据备份**：定期备份 `site/server/data/`（或 compose 的 `appdata` 卷）——含 `app.db`(WAL 伴随文件) + `templates.json` 种子。**切勿备份进仓库**。
+
+> 说明：`docker-compose.yml` 已内置 `/healthz` 健康检查、数据卷 `appdata` 持久化、`unless-stopped` 重启策略；环境变量优先读 `./server/.env`（`env_file`），也可在 `environment:` 段覆盖。
+
 ---
 
 ### 提交与推送（SSH 免 Token）

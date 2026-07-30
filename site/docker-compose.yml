@@ -8,8 +8,15 @@ services:
     environment:
       - PORT=8000
       - NODE_ENV=production
-      # 可选：在此覆盖/补充密钥（也可直接写在 ./server/.env 里）
-      # - APP_ADMIN_PASSPHRASE=你的管理员口令
+      # 可选：在此覆盖/补充密钥（也可直接写在 ./server/.env 里，二者并存时 environment 优先）
+      # —— 部署必填 ——
+      # - APP_ADMIN_PASSPHRASE=你的管理员口令        # 后台（审核台/下架/metrics）登录
+      # —— 邮箱密码重置（F15）必填：三项都不填则走 dev 降级，只落盘链接、用户收不到邮件 ——
+      # - RESEND_API_KEY=re_xxxxxxxxx                # Resend API Key（纯 fetch 发信）
+      # - RESEND_FROM=onboarding@resend.dev          # 发件人（建议用已验证域名邮箱）
+      # - APP_PUBLIC_URL=https://your-domain.com     # 重置链接域名（反代/负载下务必显式设）
+      # —— 可选 ——
+      # - APP_CORS_ORIGIN=https://your-domain.com    # 前端独立域名 / 反代时填前端源
       # - LANGSMITH_API_KEY=lsv2_xxx
     env_file:
       - ./server/.env
