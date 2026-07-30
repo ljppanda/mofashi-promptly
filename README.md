@@ -34,6 +34,19 @@
 
 ---
 
+## 技术选型与权衡（Why this stack）
+
+本项目刻意没有采用 React / Postgres 等"主流默认"，而是选用 **零运行时框架前端 + Node 内置 `node:sqlite` 单文件后端**。这不是技术保守，而是与产品定位（可自托管、数据自控、零运维）一致的工程取舍：
+
+- **前端零运行时框架（Vite + 原生 ES 模块）**：用最小依赖把复杂度留在架构而非框架。代码按 `core/` + `views/` 分层，采用 Context（共享状态）/ Module（纯函数工具）/ Component（视图）/ Factory / Configuration / Router 等模式——这些思想与 React / Vue / NestJS 完全同构，证明掌握的是工程方法而非某个库。去除框架运行时后，首屏更轻、构建产物更可控。
+- **后端 Node 22 + `tsx` + 内置 `node:sqlite`**：单文件数据库（WAL）让整个服务"拷走即跑"，无需独立数据库进程，天然契合私有化部署 / 内网 / 个人数据不出域的合规场景。`node:sqlite` 为 Node 22 新内置能力，避免引入额外数据库驱动；规模需要时存储层可平滑替换为 Postgres 等（SQL 接口基本同构，迁移 runner 已版本化）。
+- **LangGraph + LlamaIndex + LanceDB（可选 RAG）**：Agent 用 LangGraph 状态图表达 `clarify → draft → validate → finalize` 的回流逻辑，比手写回调更可读；RAG 默认词法召回、按需开启 bge 语义向量 + 重排，联网首次下载即激活，零配置可用。
+- **18 家 LLM 厂商直连、用户自带 Key**：模型调用走浏览器本地 + 服务端 `/relay` 白名单转发（SSRF 防护），平台不托管用户额度，隐私友好也更轻。
+
+**可迁移性说明**：上面每一层的能力都不绑定特定库。若目标环境要求 React + Postgres + NestJS，本项目的双轨鉴权 / SSRF 收口 / 限流 / 版本化迁移 / 重试主备 / 可观测等实现均可平移到对应技术栈，架构分层与设计模式直接复用。
+
+---
+
 ## 架构概览
 
 ```
