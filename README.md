@@ -234,4 +234,4 @@ git push origin main           # 不再需要任何 PAT
 
 ## 许可证
 
-许可证目标为 **MIT**（计划补充 `LICENSE` 文件）。当前默认保留所有权利，欢迎 Fork 学习；如需商用请先联系作者。
+本项目采用 **MIT 许可证**，详见仓库根目录 `LICENSE`（Copyright 2026 ljppanda）。欢迎 Fork 学习；如需商用请先联系作者。
