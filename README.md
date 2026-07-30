@@ -114,6 +114,40 @@ docker compose up -d --build
 
 ---
 
+### 提交与推送（SSH 免 Token）
+
+> 本项目推送**只用 SSH 密钥**，不在命令 / 对话里出现任何 PAT 明文。
+> 注意：GitHub **连接器（MCP）只授权 AI 调 GitHub API**（建 issue / PR / 看 CI 等），**不参与 `git push` 的 Git 传输层认证**——所以本机 git 推送仍需下面这套 SSH 凭证。
+
+换机器或重新配置时照此执行：
+
+```bash
+# 1. 生成专用 ed25519 密钥（无 passphrase 以便推送免交互）
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -N "" -C "your-github-handle"
+
+# 2. 把公钥加到 GitHub：Settings → SSH and GPG keys → New SSH key
+#    复制下面整行（.pub 文件内容）粘进去即可
+cat ~/.ssh/id_ed25519_github.pub
+
+# 3. 写 ~/.ssh/config，让 SSH 自动用该密钥并自动接受 github 主机指纹
+#    Host github.com
+#      HostName github.com
+#      User git
+#      IdentityFile ~/.ssh/id_ed25519_github
+#      StrictHostKeyChecking accept-new
+
+# 4. 把仓库 remote 切到 SSH（首次克隆若是 HTTPS，改一下）
+git remote set-url origin git@github.com:ljppanda/mofashi-promptly.git
+
+# 5. 验证（首次会提示接受主机指纹，之后零 token 直接成功）
+ssh -T git@github.com          # 看到 "You've successfully authenticated" 即 OK
+git push origin main           # 不再需要任何 PAT
+```
+
+> ⚠️ 私钥 `~/.ssh/id_ed25519_github` 本机持有即可推送，请妥善保管；若设了 passphrase，推送时会交互式询问（CI 环境需改用 deploy key 或凭据助手）。
+
+---
+
 ## 配置
 
 复制 `site/server/.env.example` 为 `site/server/.env` 后按需填写。核心项：
