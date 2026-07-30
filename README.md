@@ -83,9 +83,11 @@ site/src/
 | F11 | Remix / 派生社区模板 | 社区详情页「🍴 派生」克隆为带来源的私有可编辑副本，改完可再发布回社区，形成 Remix 闭环 |
 | F12 | 模型清单实时同步 | 设置页 🔄 一键拉取各厂商在役模型（OpenAI / Claude / Gemini 三套协议），切换厂商自动刷新下拉；拉不到时回退 OpenRouter 公开聚合目录（无需 Key），再回退内置已校准清单。内置清单经 OpenRouter 实测校准，修 3 处会 400 的错误 ID（claude 连字符 / grok-4-latest / ollama deepseek-r2） |
 | F13 | 提示词自动优化闭环 | 详情页「🔧 一键优化」：对模板采样 N 组测试目标 → 实例化 → 跑被测模型 → LLM-as-judge 4 维打分（0-20）→ 均分低于阈值则基于「评测结论」自动改写并复测，原版 vs 优化版并排对比 + 行级 diff；采用即进「历史版本」可回滚。**全程浏览器本地用用户自己的 Key，零服务端依赖** |
-| — | 发现 / 检索 | 行业 × 任务浏览、全文搜索、标签过滤、RAG 检索增强、热门预览 |
-| — | 可观测 | 各 provider 成功率 / 延迟、生成成功率、RAG 命中率、主备切换（`/ops/metrics`） |
-| — | 移动端适配 | 响应式布局，手机端可用 |
+| F14 | 修改密码 | 登录态下「设置」页可改密码：校验当前密码 → 更新（scrypt 加盐重哈希）。管理员口令走服务端环境变量，不入用户表 |
+| F15 | 邮箱密码重置 | 业界标准自助找回：登录页「忘记密码？」→ 填邮箱 → 服务端生成一次性令牌（SHA-256 存储、30 分钟过期、单次用），邮件发重置链接；点击后设新密码（≥8 位）。忘记密码均匀返回 200 + 枚举防护，前置 5 次/小时/IP 限流。生产需配置 `RESEND_API_KEY` + `RESEND_FROM` + `APP_PUBLIC_URL`（未配置走 dev 降级，链接落盘 `data/dev-reset-links.log`） |
+| F16 | 发现 / 检索 | 行业 × 任务浏览、全文搜索、标签过滤、RAG 检索增强、热门预览 |
+| F17 | 可观测 | 各 provider 成功率 / 延迟、生成成功率、RAG 命中率、主备切换（`/ops/metrics`） |
+| F18 | 移动端适配 | 响应式布局，手机端可用 |
 
 ---
 
@@ -159,6 +161,7 @@ git push origin main           # 不再需要任何 PAT
 - `MODERATION_PROVIDER` / `MODERATION_MODEL` / `MODERATION_API_KEY`：社区 AI 审核（公网建议开启）。
 - `SENTRY_DSN`：可选错误聚合（仅设则启用）。
 - `LOG_FORMAT`：日志格式（`json` 切 JSON 行便于采集）。
+- `RESEND_API_KEY` / `RESEND_FROM` / `APP_PUBLIC_URL`：**邮箱密码重置（F15）投递所需**。`RESEND_API_KEY` 走 Resend 发信（纯 fetch，无需装包）；`RESEND_FROM` 发件人（缺省 `onboarding@resend.dev`）；`APP_PUBLIC_URL` 站点公网地址，用于生成重置链接（`https://<站点>/?token=...`）。三者均**未配置**时走 dev 降级：仅把重置链接打印到服务端日志并同步落盘 `site/server/data/dev-reset-links.log`，便于本地/自测。
 - `LANGSMITH_*`：可选链路追踪。
 
 > ⚠️ 安全提示：`.env`、会话密钥 `.app_secret`、数据库 `*.db*`、向量库 `lancedb/`、构建产物 `dist/`、`node_modules/` 均已在 `.gitignore` 中排除，**切勿提交**。
@@ -173,7 +176,7 @@ git push origin main           # 不再需要任何 PAT
 - **数据可靠性**：SQLite WAL + `busy_timeout` 防并发写锁；**版本化 schema 迁移 runner**（改表结构不炸老库）；`scripts/backup.mjs` 安全备份（含 WAL 伴随文件 + 轮转）。
 - **LLM 韧性**：指数退避重试（仅可重试错误）+ provider 主备切换。
 - **可观测**：内存指标（provider 成功率 / 延迟、生成成功率、RAG 命中率、主备切换）+ `/ops/metrics`（ADMIN）+ 可选 Sentry。
-- **其他**：集中输入长度校验、内存固定窗口速率限制（全局 240/min、注册 5/h、relay 30/min）、结构化日志、进程优雅退出、Docker、CI/CD。
+- **其他**：集中输入长度校验、内存固定窗口速率限制（全局 240/min、注册 5/h、忘记密码 5/h、relay 30/min）、结构化日志、进程优雅退出、Docker、CI/CD。
 
 ---
 
@@ -190,6 +193,7 @@ git push origin main           # 不再需要任何 PAT
 - 三大高优先级能力：① 跨模型对比测试 + token / 成本预估（F9）；② 用户模板版本历史 + 行级 diff / 回滚（F10）；③ Remix / 派生社区模板（F11）
 - 模型清单自愈（F12）：设置页实时拉取厂商在役模型 + OpenRouter 聚合目录二级兜底 + 内置清单经实测校准（修 claude 连字符 / grok-4-latest / ollama deepseek-r2 三处 400 bug）
 - 提示词自动优化闭环（F13）：详情页「一键优化」——采样评测 → LLM-as-judge 4 维打分 → 低于阈值自动改写并复测 → 原版/优化版对比 + 行级 diff；采用即进版本历史可回滚，全程浏览器本地、零服务端依赖
+- 账号自助密码体系（F14 / F15）：**修改密码**（登录态校验当前密码后更新，scrypt 加盐重哈希；管理员口令走环境变量不入用户表）+ **邮箱密码重置**（业界标准自助找回：`forgot-password` 均匀返回 200 + 枚举防护 + 5 次/小时/IP 限流 → `reset-password` 用 SHA-256 一次性令牌、30 分钟过期、单次用、新密码 ≥8 位；生产走 Resend，未配置走 dev 降级并落盘 `data/dev-reset-links.log`）
 - 前端样式工程化：Tailwind 由运行时 CDN 改为**构建期编译**（PostCSS + autoprefixer 扫描 `index.html` + `src/**` 产出工具类 CSS），彻底去除 `cdn.tailwindcss.com` 运行时依赖；CSP 同步收紧（移除该域名白名单）。`index.html` 补齐 SEO 元信息（description / keywords / Open Graph / Twitter Card / JSON-LD `WebSite` 结构化数据）
 - 社区冷启动 + SEO 落地：服务端 `seedCommunityIfEmpty()` **幂等**注入 8 个官方精选模板（小红书种草 / 代码评审 / 周报 / 教案 / 电商详情 / 理财 / 健康科普 / 合同审查，带真实热度与评分），填满社区 / 热度榜 / sitemap 空状态；`/sitemap` 始终含首页 / 社区 / 热度榜核心静态路由，模板页按真实 id 动态列出，保证可被搜索引擎收录
 - 生成体验优化：首页生成结果入口由淡链接改为**醒目主按钮**「✨ 打开模板，生成你的提示词」，生成成功后自动滚动入屏；本页已生成过时再次点「生成模板」会**二次确认**，避免误建重复草稿
