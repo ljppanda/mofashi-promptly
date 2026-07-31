@@ -137,6 +137,30 @@ export const MIGRATIONS: Migration[] = [
   //   name: "add_community_flag",
   //   up: (db) => { db.exec("ALTER TABLE community ADD COLUMN flagged INTEGER NOT NULL DEFAULT 0"); },
   // },
+  {
+    version: 5,
+    name: "collections_2026_07_31",
+    up: (db) => {
+      // 合集/专辑（UGC 组织，对标 Snack Prompt 的 List）：用户把已发布社区模板收进命名合集。
+      db.exec(`CREATE TABLE IF NOT EXISTS collections(
+        id TEXT PRIMARY KEY,
+        author_id TEXT,
+        author TEXT NOT NULL DEFAULT '匿名',
+        title TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS collection_items(
+        collection_id TEXT NOT NULL,
+        item_id TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        added_at INTEGER NOT NULL,
+        PRIMARY KEY (collection_id, item_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_coll_items_coll ON collection_items(collection_id, position)`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_coll_items_item ON collection_items(item_id)`);
+    },
+  },
 ];
 
 // 应用所有「未应用」的迁移。返回实际执行了的迁移名（便于启动日志）。

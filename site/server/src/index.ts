@@ -18,6 +18,8 @@ import {
   reportCommunity, listReports, resolveReport, logModeration, listModerationLog,
   listCommunityMine, draftsCommunityMine, getUserById,
   addComment, listComments, deleteComment, listCommunityByAuthor, findSimilarCommunity,
+  createCollection, listCollections, getCollectionWithItems, listMyCollections,
+  addCollectionItem, removeCollectionItem, isCollectionOwner,
   recordTrace, listTraces, closeDb,
 } from "./db.js";
 import {
@@ -596,6 +598,54 @@ async function handleCommunityAuthor(req: http.IncomingMessage, res: http.Server
   const authorName = rows.length ? rows[0].author : (getUserById(authorId)?.username || authorId);
   sendJSON(res, 200, { authorId, author: authorName, items: rows });
 }
+// ---- 合集/专辑（C4，报告 #2）----
+async function handleCollectionsList(req: http.IncomingMessage, res: http.ServerResponse) {
+  const u = new URL(req.url ?? "/", "http://localhost");
+  const rows = listCollections({ limit: Number(u.searchParams.get("limit") || "50"), offset: Number(u.searchParams.get("offset") || "0") });
+  sendJSON(res, 200, rows);
+}
+async function handleCollectionDetail(req: http.IncomingMessage, res: http.ServerResponse) {
+  const u = new URL(req.url ?? "/", "http://localhost");
+  const id = u.searchParams.get("id");
+  if (!id) return sendJSON(res, 400, { error: "缺少 id" });
+  const r = getCollectionWithItems(id);
+  if (!r) return sendJSON(res, 404, { error: "无此合集" });
+  sendJSON(res, 200, r);
+}
+async function handleCollectionsMine(req: http.IncomingMessage, res: http.ServerResponse) {
+  const me = authPayload(req);
+  if (!me) return sendJSON(res, 401, { error: "请先登录后再查看" });
+  sendJSON(res, 200, listMyCollections(me.sub));
+}
+async function handleCollectionCreate(req: http.IncomingMessage, res: http.ServerResponse) {
+  const me = authPayload(req);
+  if (!me) return sendJSON(res, 401, { error: "请先登录后再创建合集" });
+  const raw = await readBody(req);
+  let p: any; try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
+  if (!p.title || !String(p.title).trim()) return sendJSON(res, 400, { error: "缺少合集标题" });
+  const vErr = checkLengths(p, { title: 120, description: 500 });
+  if (vErr.length) return sendJSON(res, 400, { error: vErr.join("；") });
+  const author = me.sub === "admin" ? "admin" : (getUserById(me.sub)?.username || me.sub);
+  const r = createCollection({ authorId: me.sub, author, title: String(p.title).slice(0, 120), description: p.description || "" });
+  sendJSON(res, 200, r);
+}
+async function handleCollectionItem(req: http.IncomingMessage, res: http.ServerResponse) {
+  const me = authPayload(req);
+  if (!me) return sendJSON(res, 401, { error: "请先登录" });
+  const raw = await readBody(req);
+  let p: any; try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
+  if (!p.collectionId || !p.itemId) return sendJSON(res, 400, { error: "缺少 collectionId 或 itemId" });
+  const vErr = checkLengths(p, { collectionId: LIMITS.ID, itemId: LIMITS.ID });
+  if (vErr.length) return sendJSON(res, 400, { error: vErr.join("；") });
+  // 仅合集作者或管理员可增删成员
+  if (!isCollectionOwner(p.collectionId, me.sub, me.role === "admin")) {
+    return sendJSON(res, 403, { error: "只能修改自己创建的合集" });
+  }
+  const item = getCommunity(p.itemId);
+  if (!item || item.status !== "published") return sendJSON(res, 404, { error: "无此公开模板" });
+  const ok = p.action === "remove" ? removeCollectionItem(p.collectionId, p.itemId) : addCollectionItem(p.collectionId, p.itemId);
+  sendJSON(res, 200, { ok, action: p.action || "add" });
+}
 // 基础 SEO（C4）：sitemap.xml 列出已公开社区模板；robots.txt 指向 sitemap。
 // SITE_URL 环境变量可覆盖站点根（部署时设为公网域名，默认 localhost）。
 async function handleSitemap(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -755,6 +805,12 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/community/author") && req.method === "GET") return handleCommunityAuthor(req, res);
   if (url.startsWith("/community/report") && req.method === "POST") return handleCommunityReport(req, res);
   if (url.startsWith("/community/takedown") && req.method === "POST") return handleCommunityTakedown(req, res);
+  // 合集/专辑（C4，报告 #2）：注意前缀顺序——mine 必须在 collections 列表前，item 必须在 collection 创建前
+  if (url.startsWith("/community/collections/mine") && req.method === "GET") return handleCollectionsMine(req, res);
+  if (url.startsWith("/community/collections") && req.method === "GET") return handleCollectionsList(req, res);
+  if (url.startsWith("/community/collection/detail") && req.method === "GET") return handleCollectionDetail(req, res);
+  if (url.startsWith("/community/collection/item") && req.method === "POST") return handleCollectionItem(req, res);
+  if (url.startsWith("/community/collection") && req.method === "POST") return handleCollectionCreate(req, res);
   if (url.startsWith("/traces") && req.method === "GET") return handleTraces(req, res);
   if (url.startsWith("/ops/metrics") && req.method === "GET") return handleOpsMetrics(req, res);
   if (url === "/sitemap.xml" && req.method === "GET") return handleSitemap(req, res);

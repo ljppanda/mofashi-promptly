@@ -441,6 +441,99 @@ export function listCommunityByAuthor(authorId: string): CommunityRow[] {
   const rows = db.prepare("SELECT * FROM community WHERE author_id = ? AND status = 'published' ORDER BY COALESCE(published_at, created_at) DESC").all(authorId) as any[];
   return rows.map(communityFromRow);
 }
+
+// =====================================================================
+// 合集/专辑（C4，报告 #2）：用户把已公开社区模板收进命名合集，提升 UGC 组织与留存。
+// 仅作者本人（或管理员）可改自己的合集（author_id 绑定，杜绝伪造）；合集本身公开可见。
+// =====================================================================
+export interface CollectionRow {
+  id: string;
+  authorId: string | null;
+  author: string;
+  title: string;
+  description: string;
+  createdAt: number;
+  itemCount?: number;
+}
+export interface CollectionDetail extends CollectionRow {
+  items: CommunityRow[];
+}
+
+function collectionFromRow(r: any): CollectionRow {
+  return {
+    id: r.id, authorId: r.author_id ?? null, author: r.author,
+    title: r.title, description: r.description, createdAt: r.created_at,
+  };
+}
+
+export function createCollection(rec: { authorId: string | null; author: string; title: string; description?: string }): CollectionRow {
+  const id = "col" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO collections(id,author_id,author,title,description,created_at) VALUES(?,?,?,?,?,?)`,
+  ).run(id, rec.authorId ?? null, rec.author || "匿名", String(rec.title).slice(0, 120), String(rec.description || "").slice(0, 500), now);
+  return getCollection(id)!;
+}
+
+export function getCollection(id: string): CollectionRow | null {
+  const r = db.prepare("SELECT * FROM collections WHERE id = ?").get(id) as any;
+  return r ? collectionFromRow(r) : null;
+}
+
+// 公开合集列表（按创建时间倒序，带成员数）
+export function listCollections(opts: { limit?: number; offset?: number } = {}): CollectionRow[] {
+  const limit = Math.min(200, Math.max(1, opts.limit || 50));
+  const offset = Math.max(0, opts.offset || 0);
+  const rows = db.prepare(
+    `SELECT c.*, (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = c.id) AS item_count
+     FROM collections c ORDER BY c.created_at DESC LIMIT ? OFFSET ?`,
+  ).all(limit, offset) as any[];
+  return rows.map((r) => ({ ...collectionFromRow(r), itemCount: r.item_count || 0 }));
+}
+
+// 我的合集（按作者），供「加入合集」弹窗选择
+export function listMyCollections(authorId: string): CollectionRow[] {
+  if (!authorId) return [];
+  const rows = db.prepare(
+    `SELECT c.*, (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = c.id) AS item_count
+     FROM collections c WHERE c.author_id = ? ORDER BY c.created_at DESC`,
+  ).all(authorId) as any[];
+  return rows.map((r) => ({ ...collectionFromRow(r), itemCount: r.item_count || 0 }));
+}
+
+// 合集详情：元信息 + 成员模板（按 position）。仅返回已公开模板（下架的不展示）。
+export function getCollectionWithItems(id: string): CollectionDetail | null {
+  const col = getCollection(id);
+  if (!col) return null;
+  const itemRows = db.prepare(
+    `SELECT cm.* FROM collection_items ci
+     JOIN community cm ON cm.id = ci.item_id
+     WHERE ci.collection_id = ? AND cm.status = 'published'
+     ORDER BY ci.position ASC, ci.added_at ASC`,
+  ).all(id) as any[];
+  return { ...col, items: itemRows.map(communityFromRow) };
+}
+
+export function addCollectionItem(collectionId: string, itemId: string): boolean {
+  const exists = db.prepare("SELECT 1 FROM collection_items WHERE collection_id = ? AND item_id = ?").get(collectionId, itemId);
+  if (exists) return false;
+  const pos = (db.prepare("SELECT COALESCE(MAX(position),0)+1 AS p FROM collection_items WHERE collection_id = ?").get(collectionId) as any).p;
+  db.prepare("INSERT INTO collection_items(collection_id,item_id,position,added_at) VALUES(?,?,?,?)").run(collectionId, itemId, pos, Date.now());
+  return true;
+}
+
+export function removeCollectionItem(collectionId: string, itemId: string): boolean {
+  const r = db.prepare("DELETE FROM collection_items WHERE collection_id = ? AND item_id = ?").run(collectionId, itemId);
+  return (r as any).changes > 0;
+}
+
+// 校验合集归属：管理员或作者本人可改
+export function isCollectionOwner(collectionId: string, authorId: string | null, isAdmin: boolean): boolean {
+  if (isAdmin) return true;
+  if (!authorId) return false;
+  const r = db.prepare("SELECT author_id FROM collections WHERE id = ?").get(collectionId) as any;
+  return !!(r && r.author_id === authorId);
+}
 // 发布去重（C3）：在已公开模板里找与待发布内容相似的，返回 top（bigram 相似度）。
 function bigramSim(a: string, b: string): number {
   if (!a || !b) return 0;

@@ -801,6 +801,29 @@ export const LLM = (function () {
     if (!r.ok) throw new Error("加载作者主页失败 " + r.status);
     return r.json();
   }
+  // 合集/专辑（C4，报告 #2）
+  async function communityCollections() {
+    const r = await fetch("/community/collections");
+    if (!r.ok) throw new Error("加载合集失败 " + r.status);
+    return r.json();
+  }
+  async function collectionDetail(id) {
+    const r = await fetch("/community/collection/detail?id=" + encodeURIComponent(id));
+    if (!r.ok) throw new Error("加载合集详情失败 " + r.status);
+    return r.json();
+  }
+  async function myCollections() {
+    return throwOnErr(await gatedFetch("/community/collections/mine", {}), "加载我的合集");
+  }
+  async function createCollection(title, description) {
+    return throwOnErr(await gatedFetch("/community/collection", { title, description }), "创建合集");
+  }
+  async function collectionAddItem(collectionId, itemId) {
+    return throwOnErr(await gatedFetch("/community/collection/item", { collectionId, itemId, action: "add" }), "加入合集");
+  }
+  async function collectionRemoveItem(collectionId, itemId) {
+    return throwOnErr(await gatedFetch("/community/collection/item", { collectionId, itemId, action: "remove" }), "移出合集");
+  }
   // 审核台数据（管理员）
   async function communityModeration() {
     const r = await gatedFetch("/community/moderation", {});
@@ -886,5 +909,5 @@ export const LLM = (function () {
     return r.json();
   }
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authChangePassword, authForgotPassword, authResetPassword, authLogout, authIsAuthed, isAdmin };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, communityPublish, communityList, communityDrafts, communityMine, communityDetail, communityPublishNow, communityUnpublish, communityDelete, communityRate, communityUse, communityFavorite, communityReport, communityComment, communityComments, communityAuthor, communityCollections, collectionDetail, myCollections, createCollection, collectionAddItem, collectionRemoveItem, communityModeration, communityTakedown, communityReportResolve, fetchTraces, authLogin, authRegister, authChangePassword, authForgotPassword, authResetPassword, authLogout, authIsAuthed, isAdmin };
 })();

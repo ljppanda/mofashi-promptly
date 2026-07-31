@@ -141,6 +141,7 @@ export async function community(): Promise<void> {
       <button class="btn btn-ghost btn-sm tab-btn active" data-tab="square">🏠 社区广场</button>
       <button class="btn btn-ghost btn-sm tab-btn" data-tab="mine">📂 我的发布</button>
       ${LLM.isAdmin() ? '<button class="btn btn-ghost btn-sm tab-btn" data-tab="mod">🛡 审核台</button>' : ""}
+      <a href="#/collections" class="btn btn-ghost btn-sm" style="margin-left:auto;">📚 合集</a>
     </div>
     <div class="flex items-center gap-2 mt-3 flex-wrap">
       <input id="cm-q" class="input" style="flex:1;min-width:160px;" placeholder="搜索标题 / 行业 / 标签 / 正文…" />
@@ -380,6 +381,7 @@ export async function communityDetail(id: string): Promise<void> {
       <button id="cm-fav" class="btn btn-ghost btn-sm">⭐ 收藏</button>
       <button id="cm-test-open" class="btn btn-ghost btn-sm">🧪 测试这个提示词</button>
       <button id="cm-prev" class="btn btn-ghost btn-sm">🔍 示例预览</button>
+      <button id="cm-addcol" class="btn btn-ghost btn-sm">📚 加入合集</button>
       ${row.status === "published" ? '<button id="cm-report" class="btn btn-ghost btn-sm">⚠ 举报</button>' : ""}
     </div>
     <div id="cm-test-wrap" class="card tpl-card" style="margin-top:16px;display:none;">
@@ -510,6 +512,8 @@ export async function communityDetail(id: string): Promise<void> {
   ctx.cCurrentPrompt = row.prompt;
   const cmPrev = (document.getElementById("cm-prev") as HTMLButtonElement);
   if (cmPrev) cmPrev.addEventListener("click", () => openPreviewModal(row));
+  const cmAddCol = (document.getElementById("cm-addcol") as HTMLButtonElement);
+  if (cmAddCol) cmAddCol.addEventListener("click", () => openAddToCollectionModal(row.id));
   ctx.refineCtx = communityRefineCtx();
   const testOpen = (document.getElementById("cm-test-open") as HTMLButtonElement);
   if (testOpen) testOpen.addEventListener("click", () => {
@@ -534,6 +538,81 @@ export async function communityDetail(id: string): Promise<void> {
   if (cRefineGo) cRefineGo.addEventListener("click", handleRefine);
   const cRefineCancel = (document.getElementById("cm-refine-cancel") as HTMLButtonElement);
   if (cRefineCancel) cRefineCancel.addEventListener("click", closeRefineBox);
+}
+
+// 加入合集弹窗（C4，报告 #2）：列出我的合集，可把当前模板加入/移出，也可当场新建合集。
+// 需登录；未登录时后端返回 401，这里捕获并提示去登录。
+export async function openAddToCollectionModal(itemId: string): Promise<void> {
+  if (!LLM.authIsAuthed()) { toast("请先登录后再加入合集"); return; }
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.id = "addcol-overlay";
+  ov.innerHTML = `
+    <div class="modal-card card" style="max-width:560px;width:94%;max-height:90vh;overflow:auto;">
+      <div class="flex items-center justify-between">
+        <div class="ttl">📚 加入合集</div>
+        <button id="addcol-close" class="btn btn-ghost btn-sm">关闭</button>
+      </div>
+      <p class="muted mt-2" style="font-size:.8rem;">把这条模板收进你的合集；勾选「新建合集」可顺便建一个。仅你能增删自己合集的成员。</p>
+      <div id="addcol-list" class="mt-3">加载中…</div>
+      <div class="mt-3" style="border-top:1px solid var(--brand-100);padding-top:12px;">
+        <label class="text-sm font-medium" style="color:var(--slate)">新建合集（可选）</label>
+        <input id="addcol-new" class="input" style="margin-top:4px;" placeholder="合集标题，留空则不新建" maxlength="120" />
+        <button id="addcol-new-go" class="btn btn-ghost btn-sm mt-2">＋ 建并加入</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  (document.getElementById("addcol-close") as HTMLButtonElement)?.addEventListener("click", close);
+
+  const listEl = (document.getElementById("addcol-list") as HTMLElement);
+  const newInput = (document.getElementById("addcol-new") as HTMLInputElement);
+  const newGo = (document.getElementById("addcol-new-go") as HTMLButtonElement);
+
+  async function render(): Promise<void> {
+    let mine: any[] = [];
+    try { mine = await LLM.myCollections(); } catch (e: any) {
+      listEl.innerHTML = '<p class="muted">加载失败：' + esc(e?.message || e) + '</p>';
+      return;
+    }
+    // 逐个合集查成员关系（个人合集数量通常很少，可接受）
+    const rows = await Promise.all(mine.map(async (c: any) => {
+      let inIt = false;
+      try { const d = await LLM.collectionDetail(c.id); inIt = (d.items || []).some((i: any) => i.id === itemId); } catch { /* ignore */ }
+      return { ...c, inIt };
+    }));
+    if (!rows.length) listEl.innerHTML = '<p class="muted">你还没有合集，下面填个标题就能新建。</p>';
+    else listEl.innerHTML = rows.map(c => `
+      <div class="flex items-center justify-between" style="padding:8px 0;border-bottom:1px solid var(--brand-100);">
+        <span>${esc(c.title)} <span class="muted" style="font-size:.72rem;">· ${c.itemCount || 0} 个</span></span>
+        <button class="btn btn-sm ${c.inIt ? "btn-primary" : "btn-ghost"} addcol-toggle" data-id="${esc(c.id)}" data-init="${c.inIt ? "1" : "0"}">${c.inIt ? "✓ 已加入" : "加入"}</button>
+      </div>`).join("");
+    listEl.querySelectorAll(".addcol-toggle").forEach(b => b.addEventListener("click", async () => {
+      const id = b.getAttribute("data-id");
+      const wasIn = b.getAttribute("data-init") === "1";
+      try {
+        if (wasIn) await LLM.collectionRemoveItem(id, itemId);
+        else await LLM.collectionAddItem(id, itemId);
+        toast(wasIn ? "已移出合集" : "✓ 已加入合集");
+        render();
+      } catch (e2: any) { toast("操作失败：" + (e2?.message || e2)); }
+    }));
+  }
+
+  newGo.addEventListener("click", async () => {
+    const title = newInput.value.trim();
+    if (!title) { toast("请填写合集标题，或选择一个已有合集"); return; }
+    try {
+      const c = await LLM.createCollection(title, "");
+      await LLM.collectionAddItem(c.id, itemId);
+      toast("✓ 已创建并加入合集");
+      close();
+      location.hash = "#/col/" + encodeURIComponent(c.id);
+    } catch (e2: any) { toast("创建失败：" + (e2?.message || e2)); }
+  });
+
+  await render();
 }
 
 // ---------- 社区详情页测试沙盒 + 评分 ----------

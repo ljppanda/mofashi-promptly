@@ -21,7 +21,7 @@ test("migrations: 内存库应用基线 v1 并创建全部表", () => {
   const ran = runMigrations(db);
   assert.ok(ran.includes("baseline_2026_07_29"), "应执行基线迁移");
   assert.ok(ran.includes("comments_2026_07_29"), "应执行 v2 评论表迁移");
-  for (const t of ["metrics", "community", "users", "reports", "moderation_log", "traces", "comments", "schema_migrations"]) {
+  for (const t of ["metrics", "community", "users", "reports", "moderation_log", "traces", "comments", "schema_migrations", "collections", "collection_items"]) {
     const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
     assert.ok(row, `表 ${t} 应存在`);
   }
