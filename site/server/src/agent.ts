@@ -382,6 +382,8 @@ export interface ClarifyQuestion {
   id: string;
   question: string;
   options: string[];
+  // 是否允许多选（如「语气风格」「覆盖维度」用户往往需同时选多个）。前端据此渲染可多选 chip。
+  multi?: boolean;
 }
 export interface AgentClarifyInput {
   provider: string;
@@ -424,7 +426,8 @@ function fallbackQuestions(tpl: { industry?: string }): ClarifyQuestion[] {
   return [
     { id: "f1", question: "这条提示词主要给谁用 / 面向什么对象？", options: ["我自己直接使用", "给团队或同事", "面向客户或外部用户", "面向不熟悉该领域的新手"] },
     { id: "f2", question: "你希望最终产出是什么形式？", options: ["一段可直接发的文字", "结构化的清单或步骤", "带示例的完整方案", "可复用的模板或框架"] },
-    { id: "f3", question: "语气风格更偏哪种？", options: ["专业严谨", "通俗易懂、友好", "简洁高效", "有创意、有感染力"] },
+    // 语气风格天然可叠加（如「专业严谨」+「简洁高效」），标记为可多选，演示多选交互
+    { id: "f3", question: "语气风格更偏哪种？", options: ["专业严谨", "通俗易懂、友好", "简洁高效", "有创意、有感染力"], multi: true },
   ].map((q, i) => ({ ...q, id: "f" + (i + 1) }));
 }
 
@@ -474,6 +477,7 @@ export async function runAgentClarify(input: AgentClarifyInput, events?: AgentCl
               options: Array.isArray(q.options)
                 ? q.options.slice(0, 4).map((o: any) => String(o)).filter(Boolean)
                 : [],
+              multi: q.multi === true,
             }))
             .filter((q: ClarifyQuestion) => q.question && q.options.length)
         : [];

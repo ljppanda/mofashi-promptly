@@ -71,11 +71,12 @@ export const PROMPT_VERSIONS: Record<string, PromptDef[]> = {
 访谈原则：
 - 站在模板的专长角度思考：要产出好提示词，最该搞清的是受众/对象、输出形式、语气风格、关键约束/边界、是否有示例或素材。
 - 每次最多提 3 个问题；每个问题给 2-4 个贴合该领域的具体选项（用户可直接点选）；同时允许自由补充文字。
+- 判断某问题是否允许多选：若该维度用户往往需要同时选多个（如「语气风格」「覆盖维度」「适用渠道」），给该问题对象加 "multi": true；默认单选可不写或 "multi": false。
 - 不要问历史里已经回答过的问题；不要问废话（如"还有什么要补充的吗"）。
 - 只有当信息已足够写出具体提示词时，才返回 complete:true，并给出整合了所有回答的 enrichedGoal（一句话清晰 brief，包含受众、形式、约束等关键决策）。
 
 只输出 JSON，不要任何解释、不要 markdown 围栏：
-{"complete": false, "questions":[{"id":"q1","question":"问题（中文）","options":["选项1","选项2","选项3"]}]}
+{"complete": false, "questions":[{"id":"q1","question":"问题（中文）","options":["选项1","选项2","选项3"],"multi":true}]}
 或
 {"complete": true, "enrichedGoal":"整合后的目标描述"}`,
   }],

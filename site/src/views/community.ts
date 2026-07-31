@@ -154,6 +154,7 @@ export async function community(): Promise<void> {
         <option value="rating">评分最高</option>
       </select>
     </div>
+    <div id="cm-stats" class="community-stats mt-3"></div>
     <div id="cm-wrap" class="mt-4">加载中…</div>
   `;
   let tab = "square";
@@ -176,6 +177,9 @@ export async function community(): Promise<void> {
         return;
       }
       wrap.innerHTML = rows.map(r => communityCard(r, tab)).join("");
+      const industries = new Set(rows.map((r: any) => r.industry).filter(Boolean));
+      const statsEl = (document.getElementById("cm-stats") as HTMLElement);
+      if (statsEl) statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业 · ✨ 变量化模板，填一句目标即可生成`;
       wrap.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => { location.hash = "#/c/" + encodeURIComponent(c.getAttribute("data-id")); }));
       if (tab === "mine") {
         wrap.querySelectorAll(".cm-publish").forEach(b => b.addEventListener("click", async (e) => {
@@ -330,7 +334,10 @@ export function communityCard(r: any, tab: string): string {
         : "");
   return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;">
     <div class="flex items-center justify-between">
-      <span class="pill pill-violet">${esc(r.industry)}</span>
+      <div class="flex items-center gap-2">
+        ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
+        <span class="pill pill-violet">${esc(r.industry)}</span>
+      </div>
       <span class="text-xs muted">${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
     </div>
     <h3 style="margin-top:6px;">${esc(r.title)}</h3>
@@ -353,7 +360,7 @@ export async function communityDetail(id: string): Promise<void> {
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.6rem;">${esc(row.title)}</h1>
-      <div class="muted" style="font-size:.85rem;margin-top:6px;"><span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}</div>
+      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}</div>
     </div>
     <div class="mt-2">${tagHtml}</div>
     ${row.note ? `<p class="slate" style="margin-top:10px;line-height:1.6;">${esc(row.note)}</p>` : ""}

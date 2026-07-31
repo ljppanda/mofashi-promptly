@@ -42,6 +42,11 @@ export function detail(slug: string): void {
   const dimsHtml = (tpl.variables && tpl.variables.length)
     ? tpl.variables.map(v => `<span class="tag">${esc(v.label)}</span>`).join("")
     : '<span class="muted">通用专家提示词（角色 + 结构由模板固定）</span>';
+  // 结构化元信息（报告#5）：变量数优先取变量表，否则按 {{占位}} 计数；字数取骨架字符数
+  const varCount = (tpl.variables && tpl.variables.length)
+    ? tpl.variables.length
+    : ((tpl.prompt || "").match(/\{\{[^}]+\}\}/g) || []).length;
+  const charCount = (tpl.prompt || "").length;
 
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
@@ -59,6 +64,7 @@ export function detail(slug: string): void {
     </div>
     <p class="slate" style="margin-top:10px;line-height:1.6;">${esc(tpl.summary)}</p>
     <div class="mt-2">${tagHtml}</div>
+    <div class="tpl-meta">📊 ${varCount} 个可填变量 · 骨架 ${charCount} 字 · 🔧 适配任意模型（F9 可跨模型对比）</div>
     ${tpl.sources && tpl.sources.length ? `<div class="gen-rag" style="margin-top:14px;"><div class="ttl">📚 该模板生成时参考了 ${tpl.sources.length} 个模板库范例</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${tpl.sources.map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s.title)}<span class="muted"> · ${esc(s.industry)}</span></span>`).join("")}</div></div>` : ""}
 
     <div class="card tpl-card" style="margin-top:18px;">
@@ -392,13 +398,13 @@ function renderClarifyQuestions(questions: any[], goal: string, msg: HTMLElement
   const qHtml = questions.map((q, qi) => {
     const opts = q.options.map(o => `<button type="button" class="opt-chip" data-qi="${qi}">${esc(o)}</button>`).join("");
     return `<div class="q-card" data-qi="${qi}">
-      <div class="q-title">${esc(q.question)}</div>
+      <div class="q-title">${esc(q.question)}${q.multi ? ' <span class="q-multi-hint">可多选</span>' : ''}</div>
       <div class="opt-row" data-qi="${qi}">${opts}</div>
       <input class="input q-free" data-qi="${qi}" placeholder="或自己补充…">
     </div>`;
   }).join("");
   if (qBox) qBox.innerHTML = `
-    <div class="clarify-head">🤖 第 ${roundLabel} 轮确认 · 点选项或自行填写，补全后点「确认」${ctx.useRound >= MAX_CLARIFY_ROUNDS - 1 ? "（最后一轮）" : ""}</div>
+    <div class="clarify-head">🤖 第 ${roundLabel} 轮确认 · 点选项（标「可多选」的可点多个）或自行填写，补全后点「确认」${ctx.useRound >= MAX_CLARIFY_ROUNDS - 1 ? "（最后一轮）" : ""}</div>
     ${historyHtml}
     ${qHtml}
     <div class="flex gap-2 mt-3 flex-wrap items-center">
@@ -407,21 +413,45 @@ function renderClarifyQuestions(questions: any[], goal: string, msg: HTMLElement
     </div>`;
 
   const selState: any = {}; // qi -> {q, a}
+  // 读取某题当前答案：优先自由补充文字；否则取已选 chip（多选时用"、"连接）
+  const currentAnswer = (qi: number): string => {
+    const free = qBox.querySelector<HTMLInputElement>(`.q-free[data-qi="${qi}"]`);
+    if (free && free.value.trim()) return free.value.trim();
+    const sel = qBox.querySelectorAll(`.opt-row[data-qi="${qi}"] .opt-chip.sel`);
+    return Array.from(sel).map(b => (b.textContent || "").trim()).join("、");
+  };
+  const record = (qi: number) => {
+    const a = currentAnswer(qi);
+    if (a) selState[qi] = { q: qText[qi], a }; else delete selState[qi];
+  };
   if (qBox) qBox.querySelectorAll(".opt-chip").forEach(btn => {
     btn.addEventListener("click", () => {
-      const qi = btn.getAttribute("data-qi");
-      qBox.querySelector(`.opt-row[data-qi="${qi}"]`).querySelectorAll(".opt-chip").forEach(b => b.classList.remove("sel"));
-      btn.classList.add("sel");
-      selState[qi] = { q: qText[qi], a: btn.textContent };
+      const qi = Number(btn.getAttribute("data-qi"));
+      const multi = !!questions[qi].multi;
+      if (multi) {
+        // 多选：点击仅切换自身选中态，不清空同组其他选项
+        btn.classList.toggle("sel");
+      } else {
+        // 单选：选中当前并把同组其他选项取消
+        qBox.querySelectorAll(`.opt-row[data-qi="${qi}"] .opt-chip`).forEach(b => b.classList.remove("sel"));
+        btn.classList.add("sel");
+      }
       const free = qBox.querySelector<HTMLInputElement>(`.q-free[data-qi="${qi}"]`);
       if (free) free.value = "";
+      record(qi);
     });
   });
   if (qBox) qBox.querySelectorAll<HTMLInputElement>(".q-free").forEach(inp => {
     inp.addEventListener("input", () => {
-      const qi = inp.getAttribute("data-qi");
-      if (inp.value.trim()) { selState[qi] = { q: qText[qi], a: inp.value.trim() }; }
-      else if (selState[qi] && selState[qi].a === inp.value.trim()) { delete selState[qi]; }
+      const qi = Number(inp.getAttribute("data-qi"));
+      const val = inp.value.trim();
+      if (val) {
+        // 自由补充优先：清空该题已选 chip
+        qBox.querySelectorAll(`.opt-row[data-qi="${qi}"] .opt-chip`).forEach(b => b.classList.remove("sel"));
+        selState[qi] = { q: qText[qi], a: val };
+      } else {
+        delete selState[qi];
+      }
     });
   });
   (document.getElementById("clarify-skip") as HTMLButtonElement).addEventListener("click", () => {
