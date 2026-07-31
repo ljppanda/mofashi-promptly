@@ -764,8 +764,8 @@ export const LLM = (function () {
     if (!r.ok) throw new Error("加载详情失败 " + r.status);
     return r.json();
   }
-  async function communityPublishNow(id) {
-    return throwOnErr(await gatedFetch("/community/publish-now", { id }), "公开");
+  async function communityPublishNow(id, confirmDuplicate = false) {
+    return throwOnErr(await gatedFetch("/community/publish-now", { id, confirmDuplicate }), "公开");
   }
   async function communityUnpublish(id) {
     return throwOnErr(await gatedFetch("/community/unpublish", { id }), "撤回");

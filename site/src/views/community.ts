@@ -9,6 +9,37 @@ import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
 import { openPreviewModal } from "./preview.js";
 
+// 公开前重复确认（#6 反垃圾去重）：后端在 publish-now 命中相似模板时返回 needsConfirm，
+// 这里弹确认框，用户确认后带 confirmDuplicate 重调才真正公开。返回最终状态供调用方决定是否刷新列表。
+function publishNowWithDupCheck(id: string): Promise<"published" | "cancelled" | "error"> {
+  return new Promise((resolve) => {
+    (async () => {
+      try {
+        const res = await LLM.communityPublishNow(id);
+        if (res && res.needsConfirm) {
+          const names = (res.similar || []).map((s: any) => s.title).join("、");
+          confirmDialog(
+            "社区已有相似模板",
+            "公开前发现 " + (res.similar || []).length + " 条高度相似的公开模板：\n" + names + "\n\n为避免重复投稿，确认仍要公开吗？",
+            async () => {
+              await LLM.communityPublishNow(id, true);
+              toast("✓ 已公开到社区广场");
+              resolve("published");
+            },
+            { confirmLabel: "仍要公开", cancelLabel: "取消", danger: false, onCancel: () => { toast("已取消公开（避免重复投稿）"); resolve("cancelled"); } }
+          );
+          return;
+        }
+        toast("✓ 已公开到社区广场");
+        resolve("published");
+      } catch (e) {
+        toast("公开失败：" + (e as any).message);
+        resolve("error");
+      }
+    })();
+  });
+}
+
 // ---------- 社区分享（M18） ----------
 // 发布弹窗：从详情页 / 我的模板复用。prefill: {title, industry, tags, prompt, note, author}
 export function openPublishForm(prefill: any): void {
@@ -186,9 +217,8 @@ export async function community(): Promise<void> {
       if (tab === "mine") {
         wrap.querySelectorAll(".cm-publish").forEach(b => b.addEventListener("click", async (e) => {
           e.stopPropagation();
-          await LLM.communityPublishNow(b.getAttribute("data-id"));
-          toast("✓ 已公开到社区广场");
-          load();
+          const st = await publishNowWithDupCheck(b.getAttribute("data-id"));
+          if (st === "published") load();
         }));
         wrap.querySelectorAll(".cm-unpublish").forEach(b => b.addEventListener("click", async (e) => {
           e.stopPropagation();
@@ -284,9 +314,8 @@ export async function moderationConsole(reload: () => void | Promise<void>): Pro
     ${logHtml}
   `;
   wrap.querySelectorAll(".cm-publish").forEach(b => b.addEventListener("click", async () => {
-    await LLM.communityPublishNow(b.getAttribute("data-id"));
-    toast("✓ 已公开到社区广场");
-    reload();
+    const st = await publishNowWithDupCheck(b.getAttribute("data-id"));
+    if (st === "published") reload();
   }));
   wrap.querySelectorAll(".cm-unpublish").forEach(b => b.addEventListener("click", async () => {
     await LLM.communityUnpublish(b.getAttribute("data-id"));

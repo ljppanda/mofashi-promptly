@@ -440,6 +440,9 @@ async function handleMetricsReset(req: http.IncomingMessage, res: http.ServerRes
 // 社区分享（M18）：发布 / 列表 / 草稿 / 公开 / 撤回 / 删除 / 评分 / 计数
 // =====================================================================
 async function handleCommunityPublish(req: http.IncomingMessage, res: http.ServerResponse) {
+  // 反垃圾（#6）：发布频控，按 IP 固定窗口，防批量灌水
+  const rlP = rateLimit("publish:" + clientIp(req), Number(process.env.RL_PUBLISH_LIMIT ?? 12), Number(process.env.RL_PUBLISH_WINDOW ?? 3600000));
+  if (!rlP.ok) return sendJSON(res, 429, { error: "发布过于频繁，请 " + rlP.retryAfter + " 秒后再试", retryAfter: rlP.retryAfter });
   const raw = await readBody(req);
   let p: any;
   try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
@@ -501,11 +504,19 @@ async function handleCommunityDetail(req: http.IncomingMessage, res: http.Server
   sendJSON(res, 200, r);
 }
 async function handleCommunityPublishNow(req: http.IncomingMessage, res: http.ServerResponse) {
+  // 反垃圾（#6）：发布频控，按 IP 固定窗口，防批量灌水
+  const rlP = rateLimit("publish:" + clientIp(req), Number(process.env.RL_PUBLISH_LIMIT ?? 12), Number(process.env.RL_PUBLISH_WINDOW ?? 3600000));
+  if (!rlP.ok) return sendJSON(res, 429, { error: "发布过于频繁，请 " + rlP.retryAfter + " 秒后再试", retryAfter: rlP.retryAfter });
   const raw = await readBody(req);
   let p: any; try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
   if (!p.id) return sendJSON(res, 400, { error: "缺少 id" });
   const rec = getCommunity(p.id);
   if (!rec) return sendJSON(res, 404, { error: "无此记录" });
+  // 公开去重（#6 反垃圾去重）：查已公开模板相似度，命中则先不发公开、要求用户确认，避免污染社区
+  const similar = findSimilarCommunity(rec.title, rec.prompt);
+  if (similar.length && !p.confirmDuplicate) {
+    return sendJSON(res, 200, { needsConfirm: true, similar, id: p.id });
+  }
   const mod = await moderateContent(`${rec.title}\n${rec.prompt}`); // 公开前再审核一次（避免草稿期绕过）
   logModeration(p.id, rec.title, "publish_public", mod.safe, mod.engine, mod.reasons || []);
   if (!mod.safe) return sendJSON(res, 403, { error: "内容未通过 AI 审核，无法公开", moderation: mod });
