@@ -10,6 +10,7 @@ import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "
 import { openPublishForm } from "./community.js";
 import { openCompareModal } from "./compare.js";
 import { openOptimizeModal } from "./optimize.js";
+import { openPreviewModal } from "./preview.js";
 
 // 模板稳定 id：优先 slug（内置/导入/生成），其次 id
 function tplId(t: any): string | null {
@@ -115,6 +116,7 @@ export function detail(slug: string): void {
         ${canEdit ? '<button id="hist-btn" class="btn btn-ghost btn-sm">🕑 历史版本</button>' : ""}
         ${canEdit ? '<button id="opt-btn" class="btn btn-ghost btn-sm">🔧 一键优化</button>' : ""}
         <button id="dl-tpl-btn" class="btn btn-ghost btn-sm">下载此模板</button>
+        <button id="prev-btn" class="btn btn-ghost btn-sm">🔍 示例预览</button>
       </div>
       <div id="use-clarify" style="margin-top:14px;display:none;"></div>
       <div id="gen-steps" class="gen-steps" style="display:none;margin-top:12px;"></div>
@@ -257,6 +259,8 @@ export function detail(slug: string): void {
     if (histBtn) histBtn.addEventListener("click", openHistory);
     const optBtn = (document.getElementById("opt-btn") as HTMLButtonElement);
     if (optBtn) optBtn.addEventListener("click", () => openOptimizeModal(ctx.current));
+    const prevBtn = (document.getElementById("prev-btn") as HTMLButtonElement);
+    if (prevBtn) prevBtn.addEventListener("click", () => openPreviewModal(ctx.current));
   }
   const compareBtn = (document.getElementById("use-compare") as HTMLButtonElement);
   if (compareBtn) compareBtn.addEventListener("click", () => {

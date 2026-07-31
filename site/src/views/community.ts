@@ -7,6 +7,7 @@ import { ALL_INDUSTRIES } from "../core/config.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
+import { openPreviewModal } from "./preview.js";
 
 // ---------- 社区分享（M18） ----------
 // 发布弹窗：从详情页 / 我的模板复用。prefill: {title, industry, tags, prompt, note, author}
@@ -378,6 +379,7 @@ export async function communityDetail(id: string): Promise<void> {
       <button id="cm-clone" class="btn btn-primary btn-sm">🍴 派生 / Remix</button>
       <button id="cm-fav" class="btn btn-ghost btn-sm">⭐ 收藏</button>
       <button id="cm-test-open" class="btn btn-ghost btn-sm">🧪 测试这个提示词</button>
+      <button id="cm-prev" class="btn btn-ghost btn-sm">🔍 示例预览</button>
       ${row.status === "published" ? '<button id="cm-report" class="btn btn-ghost btn-sm">⚠ 举报</button>' : ""}
     </div>
     <div id="cm-test-wrap" class="card tpl-card" style="margin-top:16px;display:none;">
@@ -506,6 +508,8 @@ export async function communityDetail(id: string): Promise<void> {
   // 社区版测试沙盒状态：复用模块级 cState / cCurrentPrompt，并切到社区版 refine 上下文
   ctx.cState = { msgs: [], ctl: null };
   ctx.cCurrentPrompt = row.prompt;
+  const cmPrev = (document.getElementById("cm-prev") as HTMLButtonElement);
+  if (cmPrev) cmPrev.addEventListener("click", () => openPreviewModal(row));
   ctx.refineCtx = communityRefineCtx();
   const testOpen = (document.getElementById("cm-test-open") as HTMLButtonElement);
   if (testOpen) testOpen.addEventListener("click", () => {
