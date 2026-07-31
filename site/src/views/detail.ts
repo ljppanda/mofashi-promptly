@@ -523,9 +523,10 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
       live.textContent += "\n（服务端 Agent 暂不可用，已自动改用浏览器直连生成）";
       renderGenSteps("draft", GEN_STEPS_3);
       appendThink("已切换浏览器直连，正在调用模型代写提示词…");
-      res = await LLM.useTemplate(ctx.current, goal, onToken, ctx.useController.signal);
+      res = await LLM.useTemplate(ctx.current, goal, onToken, ctx.useController.signal, true);
     }
     ctx.current._lastPrompt = res.prompt || "";
+    if (res.prompt) live.textContent = res.prompt; // 自检改写后覆盖显示最终版，避免只显示首稿
     metricBump(tplId(ctx.current), "use", 1, ctx.current.title, ctx.current.industry);
     renderGenSteps("__done__", GEN_STEPS_3);
     const usageEl = (document.getElementById("use-usage") as HTMLElement);

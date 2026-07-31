@@ -360,16 +360,38 @@ export const LLM = (function () {
   }
 
   // F1：一句话 + 行业 -> 模板草稿（onToken 可选，传入则流式）；signal 用于中断
+  // 生产级骨架（v2）：prompt 字段自带 角色/背景/目标/约束/工作流/输出规范/边界/自检 章节。
   // 返回 { tpl, usage, elapsedMs }
   async function generateTemplate(industry, sentence, onToken, signal) {
     const system = `你是一个提示词模板生成器。根据用户给出的“行业”和“一句话需求”，返回一个 JSON 对象，且 industry 字段必须等于用户指定的行业。
 字段：
-- title: 模板标题（简短）
+- title: 模板标题（简短，中文含动词）
 - industry: 必须等于用户指定的行业
 - task: 任务名
-- summary: 一句话说明
+- summary: 一句中文说明这个模板解决什么、产出什么
 - variables: 数组，每个 { name(英文snake_case), label(中文), type(select|multiselect|textarea|text), options?(数组，select/multiselect 必填), required(布尔), placeholder?(可选) }
-- prompt: 提示词骨架，用 {{变量name}} 占位，结构清晰（角色/上下文/约束/输出格式）
+- prompt: 模板正文，用 {{变量name}} 占位。prompt 必须是一个【生产级提示词骨架】，严格按以下章节组织，每节写出该领域【具体、可操作】的占位内容（不要只写小标题，要示范怎么写）：
+# 角色与背景
+你是{{...}}，[具体身份/资历/立场/能力边界]
+# 目标
+- 本次要解决的核心问题
+- 成功产出的标准
+# 核心约束与禁止项
+- 必须遵循的原则
+- 禁止做的事（如：不编造事实/不越权/专业结论需标注局限）
+# 工作流
+1. 接收并理解{{关键输入}}
+2. 分析/推理步骤
+3. 组织产出
+# 输出规范
+- 结构（分节/表格/列表）
+- 格式与示例
+- 语气与长度
+# 边界与兜底
+- 信息不足时如何追问或声明
+- 超出能力范围时如何处置
+# 自检
+- 产出前核对清单（是否覆盖目标/守约束/格式正确）
 只输出 JSON，不要解释。`;
     const user = `行业：${industry}\n需求：${sentence}`;
     let text, usage = null, elapsedMs = 0;
@@ -385,18 +407,48 @@ export const LLM = (function () {
     return { tpl: obj, usage, elapsedMs };
   }
 
+  // 生产级自检：对照生产级清单批判并改写一次，逼近人工优化效果。
+  // 非流式（在首稿流式结束后静默执行），返回改写后的完整提示词；失败回退原稿。
+  async function prodSelfCheck(prompt, goal, signal) {
+    const sys = `你是提示词质量审查员。对照【生产级提示词清单】审查给定提示词：①角色与背景是否具体（身份/资历/立场/能力边界）②目标是否明确可量化③是否有核心约束与禁止项④是否有工作流⑤输出规范是否含格式示例⑥是否有边界与兜底⑦是否有自检清单。找出缺失或薄弱项，然后直接输出【改写后的完整生产级提示词全文】。只输出提示词正文，不要解释、不要代码块围栏、开头不要写"以下是…"。`;
+    const user = `用户原始目标：${goal}\n\n待审查提示词：\n${prompt}\n\n请批判并输出改写后的完整提示词：`;
+    try {
+      const r = await callChatStream(sys, user, null, null, signal);
+      const t = (r.text || "").trim();
+      return t || prompt;
+    } catch (e) {
+      return prompt;
+    }
+  }
+
   // F2：用模板生成成品提示词（模型代写，用户只给目标）。无 RAG 直连回退用。
+  // 生产级（v2）：角色/背景/目标→约束与护栏→工作流→输出规范(含示例)→边界兜底→自检。
+  // selfCheck=true 时，首稿流式结束后静默批判改写一次，逼近人工优化效果（多一次调用）。
   // 返回 { prompt, usage, elapsedMs, sources }
-  async function useTemplate(template, goal, onToken, signal) {
-    const system = `你是一名「提示词落地工程师」。基于给定提示词模板的专长与结构，写出一条具体、可直接复制粘贴进任意 AI 助手的成品提示词。
-要求：1) 沿用模板角色设定与"上下文/背景→任务与约束→输出格式"结构，不要留 {{占位}} 或"请填写"；2) 由你（模型）根据用户目标动态写出每个维度的具体内容（情境、关键问题、示例、边界）；3) 自包含、可直接使用；4) 只输出提示词正文，不要解释、不要代码块围栏。
+  async function useTemplate(template, goal, onToken, signal, selfCheck = false) {
+    const system = `你是一名「提示词落地工程师」。基于给定提示词模板的专长与结构，写出一条【生产级、可直接复制粘贴进任意 AI 助手】的成品提示词。
+要求：
+1) 沿用模板角色设定（"你是…"），但不要留任何 {{占位}} 或"请填写"——所有占位由你根据用户目标动态写成具体、有代入感的内容（情境、关键点、示例、边界）。
+2) 严格按以下【生产级结构】组织（章节顺序可调，缺一不可）：
+   # 角色与背景：具体身份、资历、立场、能力边界，让模型明确"它是谁、不做什么"。
+   # 目标：本次要解决的核心问题与成功标准（尽量可量化）。
+   # 核心约束与禁止项：必须遵循的原则 + 明确禁止的事（如：不编造事实、不越权、涉及专业领域时标注局限/建议咨询持证专家）。
+   # 工作流：接收输入 → 分析推理 → 组织产出的具体步骤。
+   # 输出规范：明确结构（分节/表格/列表）、给出格式示例、规定语气与长度。
+   # 边界与兜底：信息不足时如何声明或追问；超出能力范围时如何处置。
+   # 自检：产出前对照的核对清单（是否覆盖目标 / 守约束 / 格式正确）。
+3) 注入真实具体的操作细节、示例与边界逻辑，而不是骨架或空话；语气与模板定位一致。
+4) 自包含、可直接使用；只输出提示词正文，不要解释、不要代码块围栏、开头不要写"以下是…"。
 【模板专长】标题：${template.title}｜行业：${template.industry}｜定位：${template.summary}｜标签：${(template.tags || []).join("、")}
 【模板结构骨架】${template.prompt}
 【要覆盖的维度】${(template.variables || []).map(v => v.label).join("、")}`;
     const user = `用户目标：${goal}\n请写出成品提示词。`;
     const r = await callChatStream(system, user, onToken, null, signal);
-    const text = (r.text || "").trim();
+    let text = (r.text || "").trim();
     if (!text) throw new Error("模型未返回提示词");
+    if (selfCheck) {
+      text = await prodSelfCheck(text, goal, signal);
+    }
     return { prompt: text, usage: r.usage, elapsedMs: r.elapsedMs, sources: [] };
   }
 

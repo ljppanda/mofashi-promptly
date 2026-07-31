@@ -142,7 +142,7 @@ test("prompts: 全部 prompt 均有 v1 且 getPrompt 返回含关键指令的文
   const ids = Object.keys(PROMPT_VERSIONS);
   assert.ok(ids.length >= 7, "应至少注册 7 个 prompt");
   for (const id of ids) {
-    assert.equal(latestVersion(id), 1, `${id} 应有 v1`);
+    assert.ok(PROMPT_VERSIONS[id].some((d) => d.version === 1), `${id} 应有 v1`);
     assert.ok(getPrompt(id).length > 20, `${id} 文本不应为空`);
   }
   assert.ok(getPrompt("draft").includes("提示词模板架构师"));

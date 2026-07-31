@@ -1,18 +1,18 @@
-// 从 site/src/templates.js 抽取模板库，生成 site/server/data/templates.json，
+// 从 site/src/templates.ts 抽取模板库，生成 site/server/data/templates.json，
 // 供 LlamaIndex 构建向量索引（M4 RAG 语料）。
-// 不依赖浏览器全局；把 window.TEMPLATES = [...] 这段数组字面量 eval 出来即可。
+// 把 `export const TEMPLATES = [...]` 这段数组字面量 eval 出来即可。
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..");
-const SRC = path.join(ROOT, "src", "templates.js");
+const SRC = path.join(ROOT, "src", "templates.ts");
 const OUT_DIR = path.join(__dirname, "..", "data");
 const OUT = path.join(OUT_DIR, "templates.json");
 
 const txt = fs.readFileSync(SRC, "utf8");
-const startKw = "window.TEMPLATES";
+const startKw = "export const TEMPLATES";
 const sIdx = txt.indexOf(startKw);
 if (sIdx < 0) throw new Error("未找到 window.TEMPLATES");
 const arrStart = txt.indexOf("[", sIdx);

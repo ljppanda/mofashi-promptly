@@ -354,15 +354,32 @@ export async function runAgentUse(
       });
       events.onUsage?.(res.usage);
 
-      // ③ 定稿
-      events.onNode?.("finalize");
-      const prompt = (res.text || "").trim();
+      // ③ 自检回路：对照生产级清单批判首稿并改写一次（静默，不影响流式），失败回退首稿
+      events.onNode?.("selfcheck");
+      let prompt = (res.text || "").trim();
       if (!prompt) {
         const msg = "模型未返回提示词正文";
         events.onError?.(msg);
         await lsEnd(rootId, { error: msg });
         return;
       }
+      try {
+        const scSys = `你是提示词质量审查员。对照【生产级提示词清单】审查给定提示词：①角色与背景是否具体（身份/资历/立场/能力边界）②目标是否明确可量化③是否有核心约束与禁止项④是否有工作流⑤输出规范是否含格式示例⑥是否有边界与兜底⑦是否有自检清单。找出缺失或薄弱项，然后直接输出【改写后的完整生产级提示词全文】。只输出提示词正文，不要解释、不要代码块围栏、开头不要写"以下是…"。`;
+        const scUser = `用户原始目标：${input.goal}\n\n待审查提示词：\n${prompt}\n\n请批判并输出改写后的完整提示词：`;
+        const sc = await chatStream({
+          provider: input.provider, model: input.model, apiKey: input.apiKey,
+          apiSecret: input.apiSecret, proxyBase: input.proxyBase, lsParentRunId: rootId,
+          system: scSys, user: scUser, onToken: undefined, signal,
+        });
+        const improved = (sc.text || "").trim();
+        if (improved) prompt = improved;
+      } catch (e) {
+        // 自检失败不影响交付，沿用首稿
+        events.onThink?.("自检改写失败，沿用首稿。");
+      }
+
+      // ④ 定稿
+      events.onNode?.("finalize");
       events.onResult?.({ prompt, sources: rag.refs });
       await lsEnd(rootId, { outputs: { promptLength: prompt.length } });
     });
