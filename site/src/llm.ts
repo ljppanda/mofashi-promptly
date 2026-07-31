@@ -425,7 +425,8 @@ export const LLM = (function () {
   // 生产级（v2）：角色/背景/目标→约束与护栏→工作流→输出规范(含示例)→边界兜底→自检。
   // selfCheck=true 时，首稿流式结束后静默批判改写一次，逼近人工优化效果（多一次调用）。
   // 返回 { prompt, usage, elapsedMs, sources }
-  async function useTemplate(template, goal, onToken, signal, selfCheck = false) {
+  // onStage(步骤key) 透出当前阶段，供前端把「直连兜底路径」也渲染成实时时间线（消除黑盒）。
+  async function useTemplate(template, goal, onToken, signal, selfCheck = false, onStage = null) {
     const system = `你是一名「提示词落地工程师」。基于给定提示词模板的专长与结构，写出一条【生产级、可直接复制粘贴进任意 AI 助手】的成品提示词。
 要求：
 1) 沿用模板角色设定（"你是…"），但不要留任何 {{占位}} 或"请填写"——所有占位由你根据用户目标动态写成具体、有代入感的内容（情境、关键点、示例、边界）。
@@ -447,6 +448,7 @@ export const LLM = (function () {
     let text = (r.text || "").trim();
     if (!text) throw new Error("模型未返回提示词");
     if (selfCheck) {
+      if (onStage) onStage("selfcheck");
       text = await prodSelfCheck(text, goal, signal);
     }
     return { prompt: text, usage: r.usage, elapsedMs: r.elapsedMs, sources: [] };

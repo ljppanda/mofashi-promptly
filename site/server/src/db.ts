@@ -264,6 +264,19 @@ function communityFromRow(r: any): CommunityRow {
 
 export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string }): CommunityRow {
   const now = Date.now();
+  const normPrompt = (rec.prompt || "").trim();
+  // 幂等去重（用户体验修复）：同一作者 + 相同标题 + 相同正文，视为重复发布，
+  // 更新已有草稿而非新增，避免「反复点发布生成一堆草稿」。匿名(authorId 空)不跨用户去重。
+  if (rec.authorId) {
+    const existing = db.prepare(
+      "SELECT * FROM community WHERE author_id=? AND title=? AND prompt=? AND status='draft'"
+    ).get(rec.authorId, rec.title, normPrompt) as any;
+    if (existing) {
+      db.prepare("UPDATE community SET industry=?, tags=?, note=?, created_at=? WHERE id=?")
+        .run(rec.industry, JSON.stringify(rec.tags || []), rec.note || "", now, existing.id);
+      return getCommunity(existing.id)!;
+    }
+  }
   // 作者名以服务端鉴权身份为准（authorId 绑定），杜绝客户端伪造"李鬼"。
   db.prepare(
     `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,status,created_at,published_at,uses,favorites,rating_sum,rating_count)

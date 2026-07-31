@@ -18,6 +18,14 @@ function collectionCard(c: any): string {
 
 // 新建合集弹窗（需登录；未登录时后端返回 401，这里捕获提示去登录）
 export function openCreateCollectionModal(): void {
+  // 新建合集需登录：未登录时先引导登录，避免直接报 401
+  if (!window.Auth || !window.Auth.isAuthed()) {
+    toast("新建合集需要先登录");
+    if (window.Auth && window.Auth.ensure) {
+      window.Auth.ensure().then((t) => { if (t) openCreateCollectionModal(); });
+    }
+    return;
+  }
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
   ov.id = "col-create-overlay";

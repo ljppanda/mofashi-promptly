@@ -259,9 +259,10 @@ export function detail(slug: string): void {
     if (histBtn) histBtn.addEventListener("click", openHistory);
     const optBtn = (document.getElementById("opt-btn") as HTMLButtonElement);
     if (optBtn) optBtn.addEventListener("click", () => openOptimizeModal(ctx.current));
-    const prevBtn = (document.getElementById("prev-btn") as HTMLButtonElement);
-    if (prevBtn) prevBtn.addEventListener("click", () => openPreviewModal(ctx.current));
   }
+  // 「示例预览」对所有模板开放：内置模板虽不可编辑，也应能一键生成示例看效果
+  const prevBtn = (document.getElementById("prev-btn") as HTMLButtonElement);
+  if (prevBtn) prevBtn.addEventListener("click", () => openPreviewModal(ctx.current));
   const compareBtn = (document.getElementById("use-compare") as HTMLButtonElement);
   if (compareBtn) compareBtn.addEventListener("click", () => {
     if (!ctx.current._lastPrompt) { toast("请先生成成品提示词，再对比不同模型的表现。"); return; }
@@ -510,6 +511,8 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
     const onNode = (name: string) => {
       if (name === "meta") { renderGenSteps("retrieve", GEN_STEPS_3); return; }
       if (name === "result") { renderGenSteps("__done__", GEN_STEPS_3); return; }
+      if (name === "selfcheck") appendThink("正在进行生产级自检：对照清单补齐缺失的角色 / 约束 / 工作流 / 输出规范 / 边界兜底，输出更可靠的版本…");
+      if (name === "finalize") appendThink("自检完成，正在定稿输出最终成品提示词…");
       renderGenSteps(name, GEN_STEPS_3);
     };
     const onThink = (text: string) => { appendThink(text); };
@@ -523,7 +526,10 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
       live.textContent += "\n（服务端 Agent 暂不可用，已自动改用浏览器直连生成）";
       renderGenSteps("draft", GEN_STEPS_3);
       appendThink("已切换浏览器直连，正在调用模型代写提示词…");
-      res = await LLM.useTemplate(ctx.current, goal, onToken, ctx.useController.signal, true);
+      res = await LLM.useTemplate(ctx.current, goal, onToken, ctx.useController.signal, true, (stage) => {
+        renderGenSteps(stage, GEN_STEPS_3);
+        if (stage === "selfcheck") appendThink("正在进行生产级自检：对照清单补齐缺失的角色 / 约束 / 工作流 / 输出规范 / 边界兜底，输出更可靠的版本…");
+      });
     }
     ctx.current._lastPrompt = res.prompt || "";
     if (res.prompt) live.textContent = res.prompt; // 自检改写后覆盖显示最终版，避免只显示首稿
@@ -698,15 +704,27 @@ function downloadTemplate(): void {
 
 function toggleSave(): void {
   const id = tplId(ctx.current);
-  if (Store.hasMine(ctx.current.slug)) {
-    Store.removeMine(ctx.current.slug);
-    (document.getElementById("save-btn") as HTMLButtonElement).textContent = "☆ 收藏到我的模板";
-    metricBump(id, "favorite", -1, ctx.current.title, ctx.current.industry);
-  } else {
-    Store.addMine(ctx.current);
-    (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
-    metricBump(id, "favorite", 1, ctx.current.title, ctx.current.industry);
+  const doSave = () => {
+    if (Store.hasMine(ctx.current.slug)) {
+      Store.removeMine(ctx.current.slug);
+      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "☆ 收藏到我的模板";
+      metricBump(id, "favorite", -1, ctx.current.title, ctx.current.industry);
+    } else {
+      Store.addMine(ctx.current);
+      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
+      metricBump(id, "favorite", 1, ctx.current.title, ctx.current.industry);
+    }
+  };
+  // 收藏需登录：未登录收藏只存本机、换设备即丢，不符合「我的专属模板」预期。
+  if (!window.Auth || !window.Auth.isAuthed()) {
+    const m = (document.getElementById("msg") as HTMLElement);
+    if (m) { m.textContent = "收藏需要先登录，登录后才会存入你的专属模板库。"; setTimeout(() => { if (m) m.textContent = ""; }, 3000); }
+    if (window.Auth && window.Auth.ensure) {
+      window.Auth.ensure().then((tok) => { if (tok) { doSave(); toast("✓ 已登录并收藏"); } });
+    }
+    return;
   }
+  doSave();
 }
 
 function openHistory(): void {

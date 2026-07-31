@@ -12,16 +12,28 @@ export function myTemplates(): void {
   const mine = Store.getMine();
   const drafts = Store.getDrafts().filter(d => !mine.some(m => m.slug === d.slug));
   const all = mine.concat(drafts);
+  // 未登录时当前列表只是「本设备本地」存储（换浏览器/清缓存会丢），给出明确提示避免误解
+  const authed = !!(window.Auth && window.Auth.isAuthed());
+  const authBanner = authed ? "" : `
+    <div style="margin-top:14px;padding:12px 14px;border:1px solid var(--brand-100);background:#fff7ed;border-radius:10px;">
+      <div style="font-weight:600;">🔐 你尚未登录</div>
+      <p class="muted" style="font-size:.82rem;margin-top:6px;line-height:1.6;">下方是「本设备本地」保存的模板（换浏览器或清缓存可能丢失）。登录后会存到你的云端专属库，任意设备都能看到自己的模板。</p>
+      <button id="my-login" class="btn btn-primary btn-sm" style="margin-top:8px;">登录 / 注册</button>
+    </div>`;
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
     <div class="flex items-center justify-between mt-2">
       <h1 class="section-title" style="font-size:1.7rem;">我的模板</h1>
       <button id="my-import" class="btn btn-ghost btn-sm">📥 导入模板</button>
     </div>
+    ${authBanner}
+    <p class="muted" style="font-size:.8rem;margin-top:10px;">${authed ? "这些是登录账号下的专属模板。" : "（以下为本设备本地模板）"}</p>
     ${all.length
       ? groupedMineHtml(all)
       : '<p class="muted" style="margin-top:16px;">还没有收藏的模板。在模板详情页点「收藏到我的模板」即可，AI 生成的草稿也会自动保留在此；也可点右上「导入模板」载入本地 JSON。</p>'}
   `;
+  const lb = (document.getElementById("my-login") as HTMLButtonElement);
+  if (lb && window.Auth && window.Auth.ensure) lb.addEventListener("click", () => { window.Auth!.ensure().then((t) => { if (t) myTemplates(); }); });
   const ib = (document.getElementById("my-import") as HTMLButtonElement);
   if (ib) ib.addEventListener("click", openImportFile);
   ctx.appEl().querySelectorAll(".del-btn").forEach((b) => b.addEventListener("click", (e) => {

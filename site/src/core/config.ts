@@ -17,11 +17,12 @@ export const GEN_STEPS_5 = [
   { k: "finalize", label: "⑤ 精炼产出" },
 ];
 
-// F2 用模板生成提示词的三步状态机
+// F2 用模板生成提示词的四步状态机（含「自检优化」步，消除黑盒）
 export const GEN_STEPS_3 = [
   { k: "retrieve", label: "① 检索范例" },
   { k: "draft", label: "② 撰写提示词" },
-  { k: "finalize", label: "③ 精炼定稿" },
+  { k: "selfcheck", label: "③ 自检优化" },
+  { k: "finalize", label: "④ 精炼定稿" },
 ];
 
 // F5 动态改写提示词的两步状态机
@@ -36,7 +37,8 @@ export const STEP_HINT: Record<string, string> = {
   retrieve: "在模板库与社区广场里做向量检索，找出语义最相似的范例作为参考",
   draft: "结合参考范例与你的需求，起草模板骨架、变量与约束",
   validate: "对照规则自审：角色 / 背景 / 任务 / 格式 四段是否齐全",
-  finalize: "精炼措辞、统一格式，输出最终成果",
+  selfcheck: "对照生产级清单审查草稿，补齐缺失的角色具体性 / 约束 / 工作流 / 输出规范 / 边界兜底，输出更可靠的版本",
+  finalize: "精炼措辞、统一格式，输出最终成品提示词",
   analyze: "对照你的反馈与实际测试表现，定位原提示词的具体不足与改写方向",
   rewrite: "保留好的部分，针对反馈逐条改写，输出完整新版提示词",
 };

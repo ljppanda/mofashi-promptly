@@ -230,8 +230,13 @@ export async function community(): Promise<void> {
           e.stopPropagation();
           const id = b.getAttribute("data-id");
           confirmDialog("删除这条社区提示词？", "删除后无法恢复，草稿和已公开内容都会一并移除。", async () => {
-            await LLM.communityDelete(id);
-            load();
+            try {
+              await LLM.communityDelete(id);
+              toast("✓ 已删除");
+              load();
+            } catch (err) {
+              toast("删除失败：" + ((err as any) && (err as any).message ? (err as any).message : err));
+            }
           });
         }));
       }
@@ -240,7 +245,22 @@ export async function community(): Promise<void> {
         reportDialog(b.getAttribute("data-id"), b.getAttribute("data-title"));
       }));
     } catch (e) {
-      wrap.innerHTML = '<p class="muted">加载失败：' + esc((e as any).message) + '</p>';
+      const msg = (e as any) && (e as any).message ? (e as any).message : String(e);
+      // 未登录查看「我的发布」：友好引导登录，而非生硬地报 401
+      if (tab === "mine" && /401|未授权|请先登录|登录/.test(msg)) {
+        wrap.innerHTML = `
+          <div style="padding:16px;border:1px solid var(--brand-100);background:#fff7ed;border-radius:10px;">
+            <div style="font-weight:600;">🔐 请登录后查看你的发布</div>
+            <p class="muted" style="font-size:.85rem;margin-top:8px;line-height:1.6;">登录后即可看到你发布的草稿与已公开模板，并能公开 / 撤回 / 删除。</p>
+            <button id="mine-login" class="btn btn-primary btn-sm" style="margin-top:8px;">登录 / 注册</button>
+          </div>`;
+        const lb = document.getElementById("mine-login");
+        if (lb && window.Auth && window.Auth.ensure) lb.addEventListener("click", () => {
+          window.Auth!.ensure().then((t) => { if (t) load(); });
+        });
+        return;
+      }
+      wrap.innerHTML = '<p class="muted">加载失败：' + esc(msg) + '</p>';
     }
   }
   document.querySelectorAll("#app .tab-btn").forEach(b => b.addEventListener("click", () => {

@@ -94,10 +94,10 @@ export function home(): void {
       <h2 class="section-title">示例模板文件</h2>
       <p class="section-sub">下载查看模板格式，或导入到「我的模板」继续编辑。</p>
       <div class="flex flex-wrap gap-2" style="margin-top:14px;">
-        <a href="samples/legal-advisor.json" download class="btn btn-ghost btn-sm">⚖️ 法律顾问.json</a>
-        <a href="samples/code-review.json" download class="btn btn-ghost btn-sm">💻 代码审查.json</a>
-        <a href="samples/family-doctor.json" download class="btn btn-ghost btn-sm">🩺 家庭医生.json</a>
-        <a href="samples/product-copy.json" download class="btn btn-ghost btn-sm">🛒 商品文案.json</a>
+        <a href="/samples/legal-advisor.json" download="legal-advisor.json" class="btn btn-ghost btn-sm">⚖️ 法律顾问.json</a>
+        <a href="/samples/code-review.json" download="code-review.json" class="btn btn-ghost btn-sm">💻 代码审查.json</a>
+        <a href="/samples/family-doctor.json" download="family-doctor.json" class="btn btn-ghost btn-sm">🩺 家庭医生.json</a>
+        <a href="/samples/product-copy.json" download="product-copy.json" class="btn btn-ghost btn-sm">🛒 商品文案.json</a>
       </div>
     </section>
 

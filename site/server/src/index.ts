@@ -512,6 +512,11 @@ async function handleCommunityPublishNow(req: http.IncomingMessage, res: http.Se
   if (!p.id) return sendJSON(res, 400, { error: "缺少 id" });
   const rec = getCommunity(p.id);
   if (!rec) return sendJSON(res, 404, { error: "无此记录" });
+  // 仅作者本人或管理员可公开（已移出 ADMIN_GUARDED，普通登录用户也能公开自己的草稿）
+  const me = authPayload(req);
+  if (!(me && (me.role === "admin" || rec.authorId === me.sub))) {
+    return sendJSON(res, 403, { error: "只能公开自己发布的草稿" });
+  }
   // 公开去重（#6 反垃圾去重）：查已公开模板相似度，命中则先不发公开、要求用户确认，避免污染社区
   const similar = findSimilarCommunity(rec.title, rec.prompt);
   if (similar.length && !p.confirmDuplicate) {
@@ -528,6 +533,13 @@ async function handleCommunityUnpublish(req: http.IncomingMessage, res: http.Ser
   const raw = await readBody(req);
   let p: any; try { p = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
   if (!p.id) return sendJSON(res, 400, { error: "缺少 id" });
+  const me = authPayload(req);
+  const rec = getCommunity(p.id);
+  if (!rec) return sendJSON(res, 404, { error: "无此记录" });
+  // 仅作者本人或管理员可撤回（已移出 ADMIN_GUARDED）
+  if (!(me && (me.role === "admin" || rec.authorId === me.sub))) {
+    return sendJSON(res, 403, { error: "只能撤回自己发布的草稿" });
+  }
   const r = unpublishCommunity(p.id);
   if (r) invalidateRagIndex(); // 下架后不再参与检索
   sendJSON(res, r ? 200 : 404, r || { error: "无此记录" });
@@ -762,17 +774,19 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.startsWith("/api/auth/reset-password") && req.method === "POST") return handleAuthResetPassword(req, res);
 
-  // 普通用户闸门：已登录即可（发布/评分/使用/收藏/举报/删除草稿）
+  // 普通用户闸门：已登录即可（发布/评分/使用/收藏/举报/删除草稿/公开/撤回）
   const USER_GUARDED = [
     "/community/publish", "/community/rate", "/community/use", "/community/favorite",
     "/community/report", "/community/delete", "/community/comment",
+    "/community/publish-now", "/community/unpublish",
   ];
   if (USER_GUARDED.some((p) => url.startsWith(p) && req.method === "POST") && !verifyRequestToken(req)) {
     return sendJSON(res, 401, { error: "请先登录后再操作" });
   }
-  // 管理员闸门：公开/撤回/下架/处理举报/审核台/指标重置 仅 role==='admin'
+  // 管理员闸门：处理举报/下架/指标重置 仅 role==='admin'
+  // 注：publish-now 与 unpublish 已下放到普通登录用户，但在各自 handler 内校验「仅作者本人或管理员」
   const ADMIN_GUARDED = [
-    "/community/publish-now", "/community/unpublish", "/community/report/resolve",
+    "/community/report/resolve",
     "/community/takedown", "/metrics/reset",
   ];
   if (ADMIN_GUARDED.some((p) => url.startsWith(p) && req.method === "POST") && !verifyAdminToken(req)) {
