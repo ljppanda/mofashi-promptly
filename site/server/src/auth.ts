@@ -180,7 +180,7 @@ export async function handleAuthRegister(req: IncomingMessage, res: ServerRespon
   const email = String(p.email || "").trim().toLowerCase();
   // —— 人机验证（Cloudflare Turnstile）：公网部署必须配置 TURNSTILE_SECRET_KEY；未配置时降级放行（仅告警）——
   const turnstileToken = String(p.turnstileToken || "");
-  const tsSecret = process.env.TURNSTLE_SECRET_KEY;
+  const tsSecret = process.env.TURNSTILE_SECRET_KEY;
   if (tsSecret) {
     if (!turnstileToken) return sendJSON(res, 400, { error: "请先完成人机验证" });
     try {
