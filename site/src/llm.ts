@@ -902,8 +902,8 @@ export const LLM = (function () {
     }
     return r.json(); // { token, role, username, expiresAt }
   }
-  async function authRegister(username, password, email) {
-    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, email }) });
+  async function authRegister(username, password, email, token = "") {
+    const r = await fetch("/api/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password, email, turnstileToken: token }) });
     if (!r.ok) {
       let m = "注册失败 " + r.status;
       try { const j = await r.json(); if (j && j.error) m = j.error; } catch { /* ignore */ }

@@ -12,6 +12,7 @@
 // 用法：node scripts/backup.mjs   或   npm run backup
 // 注意：运行时服务端会持有该 db 句柄，WAL 模式下多进程并发读取是允许的；
 //       即便 checkpoint 因并发失败，拷贝三个文件本身也是一致的 WAL 快照。
+// 本文件为纯 JavaScript（无 TS 注解），由 `node` 直接运行；也可被 backup-scheduler.mjs import。
 
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
@@ -24,21 +25,20 @@ const DB_FILE = path.join(DATA_DIR, "app.db");
 const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const KEEP = Math.max(1, Number(process.env.BACKUP_KEEP ?? 7));
 
-function ts(): string {
+function ts() {
   // 形如 2026-07-29T09-30-00，文件名安全且可读
   return new Date().toISOString().replace(/[:.]/g, "-").replace("Z", "");
 }
 
-function copyIfExists(src: string, destDir: string): string | null {
+function copyIfExists(src, destDir) {
   if (!fs.existsSync(src)) return null;
   fs.copyFileSync(src, path.join(destDir, path.basename(src)));
   return path.basename(src);
 }
 
-function main(): void {
+export function runBackup() {
   if (!fs.existsSync(DB_FILE)) {
-    console.error(`[backup] 未找到数据库文件：${DB_FILE}（服务是否已启动并初始化过？）`);
-    process.exit(1);
+    throw new Error(`[backup] 未找到数据库文件：${DB_FILE}（服务是否已启动并初始化过？）`);
   }
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
@@ -46,16 +46,16 @@ function main(): void {
   try {
     const db = new DatabaseSync(DB_FILE);
     try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) {
-      console.warn(`[backup] wal_checkpoint 失败（仍可安全拷贝文件）：${(e as Error)?.message}`);
+      console.warn(`[backup] wal_checkpoint 失败（仍可安全拷贝文件）：${e?.message}`);
     } finally { db.close(); }
   } catch (e) {
-    console.warn(`[backup] 无法打开库执行 checkpoint（跳过，直接拷文件）：${(e as Error)?.message}`);
+    console.warn(`[backup] 无法打开库执行 checkpoint（跳过，直接拷文件）：${e?.message}`);
   }
 
   // 2) 整体拷贝 app.db 及伴随文件（-wal / -shm）作为一致快照
   const destDir = path.join(BACKUP_DIR, ts());
   fs.mkdirSync(destDir, { recursive: true });
-  const copied: string[] = [];
+  const copied = [];
   copied.push(path.basename(copyIfExists(DB_FILE, destDir) ?? ""));
   copyIfExists(DB_FILE + "-wal", destDir);
   copyIfExists(DB_FILE + "-shm", destDir);
@@ -74,4 +74,12 @@ function main(): void {
   console.log(`[backup] 完成：本次 ${copied.filter(Boolean).length} 个文件，保留 ${Math.min(dirs.length, KEEP)} 份。`);
 }
 
-main();
+// 仅当直接以 CLI 运行（非被 backup-scheduler.mjs import）时执行
+if (import.meta.main) {
+  try {
+    runBackup();
+  } catch (e) {
+    console.error(e?.message || String(e));
+    process.exit(1);
+  }
+}

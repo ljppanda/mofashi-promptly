@@ -28,6 +28,7 @@ site/server/data/app.db
 site/server/data/app.db-wal
 site/server/data/app.db-shm
 site/server/data/lancedb/
+site/server/data/backups/
 
 # ============ 日志 ============
 *.log

@@ -11,6 +11,7 @@
     "serve": "node dist/index.js",
     "verify:rag": "tsx scripts/verify_semantic_rag.ts",
     "backup": "node scripts/backup.mjs",
+    "backup:scheduler": "node scripts/backup-scheduler.mjs",
     "eval": "tsx scripts/eval_all.ts",
     "eval:rag": "tsx scripts/eval_rag.ts",
     "eval:chain": "tsx scripts/eval_chain.ts",

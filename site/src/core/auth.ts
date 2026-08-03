@@ -84,6 +84,7 @@ function openRegisterModal(): Promise<string | null> {
         <input id="reg-pass" type="password" class="input" style="margin-top:8px;" placeholder="密码（至少 8 位）" autocomplete="new-password" />
         <input id="reg-pass2" type="password" class="input" style="margin-top:8px;" placeholder="确认密码" autocomplete="new-password" />
         <div id="reg-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
+        <div id="reg-turnstile" style="margin-top:8px;"></div>
         <div class="flex gap-2 mt-4 flex-wrap items-center">
           <button id="reg-ok" class="btn btn-primary btn-sm">注册</button>
           <button id="reg-cancel" class="btn btn-ghost btn-sm">取消</button>
@@ -100,6 +101,33 @@ function openRegisterModal(): Promise<string | null> {
     const ok = (document.getElementById("reg-ok") as HTMLButtonElement);
     const cancel = (document.getElementById("reg-cancel") as HTMLButtonElement);
     const toLogin = (document.getElementById("reg-to-login") as HTMLAnchorElement);
+    // Cloudflare Turnstile 人机验证：部署时配置 VITE_TURNSTILE_SITE_KEY 即启用；未配置则隐藏并降级（服务端未强制）。
+    let tsToken = "";
+    const TS_SITE = (import.meta as any).env?.VITE_TURNSTILE_SITE_KEY || "";
+    const tsBox = (document.getElementById("reg-turnstile") as HTMLElement);
+    if (tsBox && !TS_SITE) tsBox.style.display = "none";
+    function ensureTurnstile(cb: () => void) {
+      const w = window as any;
+      if (w.turnstile) { cb(); return; }
+      const s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      s.async = true;
+      s.onload = cb;
+      s.onerror = () => { if (tsBox) tsBox.innerHTML = '<span class="muted" style="font-size:.74rem;">人机验证加载失败，可先注册</span>'; };
+      document.head.appendChild(s);
+    }
+    if (TS_SITE && tsBox) {
+      ensureTurnstile(() => {
+        const w = window as any;
+        if (!w.turnstile) return;
+        w.turnstile.render("#reg-turnstile", {
+          sitekey: TS_SITE,
+          callback: (t: string) => { tsToken = t; },
+          "expired-callback": () => { tsToken = ""; },
+          "error-callback": () => { tsToken = ""; },
+        });
+      });
+    }
     const submit = async () => {
       const username = (userEl && userEl.value || "").trim();
       const email = (emailEl && emailEl.value || "").trim().toLowerCase();
@@ -109,7 +137,7 @@ function openRegisterModal(): Promise<string | null> {
       if (pass !== pass2) { msg.textContent = "两次密码不一致"; return; }
       ok.disabled = true; ok.style.opacity = ".6";
       try {
-        const r = await LLM.authRegister(username, pass, email);
+        const r = await LLM.authRegister(username, pass, email, tsToken);
         applyAuth(r);
         toast("✓ 注册成功，已自动登录：" + (r.username || username));
         close(); resolve(r.token);

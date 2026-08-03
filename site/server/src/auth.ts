@@ -178,6 +178,27 @@ export async function handleAuthRegister(req: IncomingMessage, res: ServerRespon
   const username = String(p.username || "").trim();
   const password = String(p.password || "");
   const email = String(p.email || "").trim().toLowerCase();
+  // —— 人机验证（Cloudflare Turnstile）：公网部署必须配置 TURNSTILE_SECRET_KEY；未配置时降级放行（仅告警）——
+  const turnstileToken = String(p.turnstileToken || "");
+  const tsSecret = process.env.TURNSTLE_SECRET_KEY;
+  if (tsSecret) {
+    if (!turnstileToken) return sendJSON(res, 400, { error: "请先完成人机验证" });
+    try {
+      const ip = String((req.headers["x-forwarded-for"] as string)?.split(",")[0] || req.socket.remoteAddress || "").trim();
+      const vr = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ secret: tsSecret, response: turnstileToken, remoteip: ip }).toString(),
+      });
+      const vj = (await vr.json()) as any;
+      if (!vj.success) return sendJSON(res, 403, { error: "人机验证未通过，请重试" });
+    } catch (e) {
+      console.error("[auth] Turnstile 校验失败：", (e as Error)?.message);
+      return sendJSON(res, 503, { error: "人机验证服务暂不可用，请稍后重试" });
+    }
+  } else {
+    console.warn("[auth] TURNSTILE_SECRET_KEY 未配置，注册跳过人机验证（公网部署前请配置 Cloudflare Turnstile）");
+  }
   if (!/^[\w一-龥]{3,30}$/.test(username)) return sendJSON(res, 400, { error: "用户名需 3-30 位（字母/数字/下划线/中文）" });
   if (username.toLowerCase() === "admin") return sendJSON(res, 400, { error: "该用户名保留" });
   if (password.length < 8) return sendJSON(res, 400, { error: "密码至少 8 位" });

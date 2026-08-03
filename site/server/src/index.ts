@@ -67,11 +67,12 @@ function buildCsp(): string {
   const connect = [...hosts].join(" ");
   return [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://cf-assets.cloudflare.com",
+    "frame-src 'self' https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self' data:",
-    `connect-src ${connect}`,
+    `connect-src ${connect} https://challenges.cloudflare.com`,
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "form-action 'self'",
