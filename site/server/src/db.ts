@@ -224,6 +224,38 @@ export function board(sort: BoardSort = "heat", limit = 100): BoardRow[] {
 }
 
 // =====================================================================
+// 公开聚合指标（M?）：首页信任条 / 社区新鲜度 / 按行业分布 统一数据源。
+// 全部来自真实计数，绝不编造。公开 GET，无需鉴权。
+// =====================================================================
+export interface CommunitySummary {
+  communityPublished: number;   // 社区已公开模板数
+  todayPublished: number;       // 今日（本地时区 0 点起）新公开数
+  totalUses: number;            // 提示词被使用总次数（社区 uses + 精选模板 metrics.uses）
+  totalFavorites: number;       // 收藏总次数（社区 + 精选）
+  creators: number;             // 已发布内容的创作者数（DISTINCT author_id）
+  industryCounts: { industry: string; count: number }[]; // 已公开按行业分布（降序）
+}
+export function communitySummary(): CommunitySummary {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const t0 = startOfDay.getTime();
+  const pub = db.prepare("SELECT COUNT(*) c FROM community WHERE status='published'").get() as any;
+  const today = db.prepare("SELECT COUNT(*) c FROM community WHERE status='published' AND published_at >= ?").get(t0) as any;
+  const c = db.prepare("SELECT COALESCE(SUM(uses),0) u, COALESCE(SUM(favorites),0) f FROM community").get() as any;
+  const m = db.prepare("SELECT COALESCE(SUM(uses),0) u, COALESCE(SUM(favorites),0) f FROM metrics").get() as any;
+  const creators = db.prepare("SELECT COUNT(DISTINCT author_id) c FROM community WHERE author_id IS NOT NULL").get() as any;
+  const ind = db.prepare("SELECT industry, COUNT(*) c FROM community WHERE status='published' GROUP BY industry ORDER BY c DESC").all() as any[];
+  return {
+    communityPublished: pub.c || 0,
+    todayPublished: today.c || 0,
+    totalUses: (c.u || 0) + (m.u || 0),
+    totalFavorites: (c.f || 0) + (m.f || 0),
+    creators: creators.c || 0,
+    industryCounts: ind.map((r: any) => ({ industry: r.industry, count: r.c })),
+  };
+}
+
+// =====================================================================
 // 社区分享（M18）：用户发布 + 软审核（草稿 → 自己点公开 → 社区广场）
 // 状态：draft（待公开） | published（社区广场可见）
 // 社区 / 用户 / 举报 / 审核日志 等表结构由 migrations.ts 的基线 v1 创建，此处不再内联。

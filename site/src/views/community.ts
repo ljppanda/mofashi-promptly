@@ -8,6 +8,7 @@ import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
 import { openPreviewModal } from "./preview.js";
+import { loadSummary } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
 
 // 公开前重复确认（#6 反垃圾去重）：后端在 publish-now 命中相似模板时返回 needsConfirm，
 // 这里弹确认框，用户确认后带 confirmDuplicate 重调才真正公开。返回最终状态供调用方决定是否刷新列表。
@@ -42,6 +43,7 @@ function publishNowWithDupCheck(id: string): Promise<"published" | "cancelled" |
 
 // ---------- 社区分享（M18） ----------
 // 发布弹窗：从详情页 / 我的模板复用。prefill: {title, industry, tags, prompt, note, author}
+let summaryCache: any = null; // 缓存 /metrics/summary，供新鲜度信号使用
 export function openPublishForm(prefill: any): void {
   prefill = prefill || {};
   const ov = document.createElement("div");
@@ -212,7 +214,11 @@ export async function community(): Promise<void> {
       wrap.innerHTML = rows.map(r => communityCard(r, tab)).join("");
       const industries = new Set(rows.map((r: any) => r.industry).filter(Boolean));
       const statsEl = (document.getElementById("cm-stats") as HTMLElement);
-      if (statsEl) statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业 · ✨ 变量化模板，填一句目标即可生成`;
+      if (statsEl) {
+        let extra = "";
+        if (tab === "square" && summaryCache && summaryCache.todayPublished) extra = ` · ✨ 今日新增 <b>${summaryCache.todayPublished}</b> 条`;
+        statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业${extra} · 变量化模板，填一句目标即可生成`;
+      }
       wrap.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => { location.hash = "#/c/" + encodeURIComponent(c.getAttribute("data-id")); }));
       if (tab === "mine") {
         wrap.querySelectorAll(".cm-publish").forEach(b => b.addEventListener("click", async (e) => {
@@ -273,6 +279,8 @@ export async function community(): Promise<void> {
   if (qEl) qEl.addEventListener("keydown", e => { if (e.key === "Enter") load(); });
   if (sortEl) sortEl.addEventListener("change", load);
   if (industryEl) industryEl.addEventListener("change", load);
+  // 提案2：拉取聚合指标，到达后刷新广场以显示「今日新增 N 条」
+  loadSummary().then(s => { summaryCache = s; if (tab === "square") load(); });
   load();
 }
 

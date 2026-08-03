@@ -20,7 +20,7 @@ import {
   addComment, listComments, deleteComment, listCommunityByAuthor, findSimilarCommunity,
   createCollection, listCollections, getCollectionWithItems, listMyCollections,
   addCollectionItem, removeCollectionItem, isCollectionOwner,
-  recordTrace, listTraces, closeDb,
+  recordTrace, listTraces, closeDb, communitySummary,
 } from "./db.js";
 import {
   handleAuthLogin, handleAuthMe, handleAuthRegister, handleAuthChangePassword, handleAuthForgotPassword, handleAuthResetPassword,
@@ -403,6 +403,10 @@ async function handleMetricsBoard(req: http.IncomingMessage, res: http.ServerRes
   const sort = (u.searchParams.get("sort") as BoardSort) || "heat";
   const limit = Number(u.searchParams.get("limit") || "100");
   sendJSON(res, 200, board(sort, Math.min(500, Math.max(1, limit))));
+}
+// 公开聚合指标（首页信任条 / 社区新鲜度 / 按行业分布）。无需鉴权。
+async function handleMetricsSummary(_req: http.IncomingMessage, res: http.ServerResponse) {
+  sendJSON(res, 200, communitySummary());
 }
 async function handleMetricsOne(req: http.IncomingMessage, res: http.ServerResponse) {
   const u = new URL(req.url ?? "/", "http://localhost");
@@ -807,6 +811,7 @@ const server = http.createServer(async (req, res) => {
   if (url.startsWith("/agent/clarify") && req.method === "POST") return handleAgentClarify(req, res);
   if (url.startsWith("/agent/refine") && req.method === "POST") return handleAgentRefine(req, res);
   if (url.startsWith("/metrics/board") && req.method === "GET") return handleMetricsBoard(req, res);
+  if (url.startsWith("/metrics/summary") && req.method === "GET") return handleMetricsSummary(req, res);
   if (url.startsWith("/metrics?id=") && req.method === "GET") return handleMetricsOne(req, res);
   if (url.startsWith("/metrics/reset") && req.method === "POST") return handleMetricsReset(req, res);
   if (url.startsWith("/metrics/bump") && req.method === "POST") return handleMetricsBump(req, res);
