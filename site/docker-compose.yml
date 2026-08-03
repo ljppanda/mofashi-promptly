@@ -1,6 +1,11 @@
 services:
   ppt-agent:
-    build: .
+    build:
+      context: .
+      # 前端 Cloudflare Turnstile Site Key（构建期固化进 dist）；读同级 site/.env 的
+      # VITE_TURNSTILE_SITE_KEY，不传则留空（前端自动隐藏验证框、后端降级放行）。
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     image: ppt-agent:local
     container_name: ppt-agent
     ports:
@@ -11,6 +16,7 @@ services:
       # 可选：在此覆盖/补充密钥（也可直接写在 ./server/.env 里，二者并存时 environment 优先）
       # —— 部署必填 ——
       # - APP_ADMIN_PASSPHRASE=你的管理员口令        # 后台（审核台/下架/metrics）登录
+      # - TURNSTILE_SECRET_KEY=0x...                  # 注册人机验证私钥（也可写在 ./server/.env 由 env_file 注入；不填则注册降级放行）
       # —— 邮箱密码重置（F15）必填：三项都不填则走 dev 降级，只落盘链接、用户收不到邮件 ——
       # - RESEND_API_KEY=re_xxxxxxxxx                # Resend API Key（纯 fetch 发信）
       # - RESEND_FROM=onboarding@resend.dev          # 发件人（建议用已验证域名邮箱）

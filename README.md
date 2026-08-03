@@ -16,7 +16,7 @@
 - **真实多用户 + 作者身份服务端绑定**：开放注册（`scrypt` 加盐哈希），发布时服务端强制绑定作者，杜绝伪造；"我的发布"按作者过滤。
 - **社区闭环**：发布 / 评分（1–5 星）/ 收藏 / 举报 / 管理员审核台 / 作者主页 / 热度榜，形成质量飞轮。
 - **内置 RAG 检索增强**：默认词法召回，可选开启 bge 语义向量 + RRF 混合召回 + cross-encoder 重排（联网首次下载模型即激活）。
-- **生产级安全 + 韧性基线**：鉴权、SSRF 防护、CSP/XSS 收口、SQLite WAL、输入长度校验、速率限制、结构化日志、进程优雅退出、Docker、CI/CD、版本化 schema 迁移 + 备份、**LLM 指数退避重试 + 主备切换**、**可观测 metrics + 可选 Sentry**、**Prompt 版本锁定**，均已落地。
+- **生产级安全 + 韧性基线**：鉴权、注册人机验证（Turnstile）、SSRF 防护、CSP/XSS 收口、SQLite WAL、输入长度校验、速率限制、结构化日志、进程优雅退出、Docker（含自动备份调度）、CI/CD、版本化 schema 迁移 + 备份（定时化）、**LLM 指数退避重试 + 主备切换**、**可观测 metrics + 可选 Sentry**、**Prompt 版本锁定**，均已落地。
 - **导入 / 导出闭环**：导出支持「成品 OpenAI JSON / Markdown / 纯文本 / 模板 JSON」四格式；导入支持「模板 JSON（含 prompt）/ 成品 OpenAI JSON（含 messages）」两种格式，载入详情页可继续编辑 / 收藏。
 - **模板评测框架**：生成端 + 裁判端分离，支持交叉验证，内置评测集（已扩至 33 例），`npm run eval` 一键编排。
 
@@ -139,6 +139,7 @@ docker compose up -d --build
 2. **取代码**：`git clone git@github.com:ljppanda/mofashi-promptly.git && cd mofashi-promptly/site`
 3. **写配置**：`cp server/.env.example server/.env`，编辑 `.env` 至少填：
    - `APP_ADMIN_PASSPHRASE=...`（**必填**：后台审核台 / 下架 / metrics 登录口令）
+   - `TURNSTILE_SECRET_KEY=...`（**注册人机验证建议开启**：在 [Cloudflare Turnstile](https://dash.cloudflare.com/turnstile) 免费申请；不填则注册降级放行、验证框不出现。前端 Site Key 写在项目根 `site/.env` 的 `VITE_TURNSTILE_SITE_KEY=1x...`，构建镜像时通过 `docker compose build --build-arg VITE_TURNSTILE_SITE_KEY=1x...` 注入，或靠 compose 同级 `site/.env` 自动读取）
    - `RESEND_API_KEY` / `RESEND_FROM` / `APP_PUBLIC_URL`（**邮箱重置必填**：三项都不填则走 dev 降级，只把重置链接打印到容器日志并落盘 `server/data/dev-reset-links.log`，用户收不到邮件）
    - `APP_CORS_ORIGIN=https://你的域名`（前端走独立域名 / 反代时填前端源；同源部署可不设）
    - 其余按需：`LLM_FALLBACK_*`、`MODERATION_*`、`SENTRY_DSN`、`RAG_EMBEDDING` 等（详见 `.env.example` 注释）
@@ -151,7 +152,7 @@ docker compose up -d --build
         reverse_proxy localhost:8000
     }
     ```
-7. **数据备份**：定期备份 `site/server/data/`（或 compose 的 `appdata` 卷）——含 `app.db`(WAL 伴随文件) + `templates.json` 种子。**切勿备份进仓库**。
+7. **数据备份（自动定时化）**：镜像随容器启动即自动备份一次、并每 `BACKUP_INTERVAL_MS`（默认 6h，下限 60s）循环备份到 `server/data/backups/`（compose 的 `appdata` 卷内，已持久化并轮转保留多份），**无需手动操作**。如需手动触发：进容器执行 `node scripts/backup.mjs`。备份目录已被 `.gitignore` 忽略，**切勿备份进仓库**。
 
 > 说明：`docker-compose.yml` 已内置 `/healthz` 健康检查、数据卷 `appdata` 持久化、`unless-stopped` 重启策略；环境变量优先读 `./server/.env`（`env_file`），也可在 `environment:` 段覆盖。
 
@@ -249,7 +250,7 @@ git push origin main           # 不再需要任何 PAT
 
 **后续改进方向（按优先级）**：
 
-1. **公网就绪 Phase 2-4**：注册强防护（Turnstile 验证码 / 邮箱验证）、TLS 反代、备份定时化、DB↔LanceDB 一致性。
+1. **公网就绪 Phase 2-4**：✅ 注册强防护（Turnstile 验证码）已落地、✅ 备份定时化（`backup-scheduler` 随容器自动运行）已落地、DB↔LanceDB 一致性经核查机制健全无需改动；仅 TLS 反代（按上方 Caddy 片段即配）与邮箱验证（可选增强）待上线前配置。
 2. **模板资产化深化（差异化核心）**：模板组合 / 链式（composable）、引用关系图、跨模板复用与引用追踪。
 3. **评测 → 优化闭环**：基于评测结果的自动优化循环（prompt auto-improve，结合 F9 跨模型对比择优）。
 4. **社区发现 / SEO**：全文搜索增强、标签体系、作者主页完善（sitemap / OG 元信息已落地）。
