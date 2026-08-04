@@ -470,6 +470,7 @@ async function handleCommunityPublish(req: http.IncomingMessage, res: http.Serve
     prompt: String(p.prompt),
     tags: Array.isArray(p.tags) ? p.tags.map(String).slice(0, 8) : [],
     note: p.note || "",
+    cover: typeof p.cover === "string" ? p.cover : "",
   });
   // 发布去重（C3）：草稿创建后查已公开模板相似度，附到返回供前端提示（不打断流程）
   const similar = findSimilarCommunity(String(p.title), String(p.prompt));

@@ -2,7 +2,7 @@
 // 社区详情页的测试沙盒与评分逻辑（cSend/cClear/cRate/cLoadRate/highlightStarsC）也置于本模块，
 // 与模板详情页共享 refine 改写逻辑（来自 refine.ts），避免循环依赖。
 import { ctx } from "../core/ctx.js";
-import { esc, setMeta, toast, confirmDialog, fmtUsage } from "../core/ui.js";
+import { esc, setMeta, toast, confirmDialog, fmtUsage, fmtRelative } from "../core/ui.js";
 import { ALL_INDUSTRIES } from "../core/config.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
@@ -41,8 +41,23 @@ function publishNowWithDupCheck(id: string): Promise<"published" | "cancelled" |
   });
 }
 
+// 行业主题色（封面占位图渐变）：无封面时按行业给出视觉区分，提升列表视觉吸引力
+const INDUSTRY_PH: Record<string, string> = {
+  "写作创作": "linear-gradient(135deg,#f472b6,#db2777)",
+  "编程开发": "linear-gradient(135deg,#60a5fa,#2563eb)",
+  "职场办公": "linear-gradient(135deg,#34d399,#059669)",
+  "教育培训": "linear-gradient(135deg,#fbbf24,#d97706)",
+  "电商运营": "linear-gradient(135deg,#f87171,#dc2626)",
+  "金融": "linear-gradient(135deg,#a78bfa,#7c3aed)",
+  "医疗健康": "linear-gradient(135deg,#22d3ee,#0891b2)",
+  "法律": "linear-gradient(135deg,#94a3b8,#475569)",
+};
+function industryPh(ind: string): string {
+  return INDUSTRY_PH[ind] || "linear-gradient(135deg,#818cf8,#4f46e5)";
+}
+
 // ---------- 社区分享（M18） ----------
-// 发布弹窗：从详情页 / 我的模板复用。prefill: {title, industry, tags, prompt, note, author}
+// 发布弹窗：从详情页 / 我的模板复用。prefill: {title, industry, tags, prompt, note, author, cover}
 let summaryCache: any = null; // 缓存 /metrics/summary，供新鲜度信号使用
 export function openPublishForm(prefill: any): void {
   prefill = prefill || {};
@@ -75,6 +90,10 @@ export function openPublishForm(prefill: any): void {
         <textarea id="pf-note" class="input" rows="2" style="margin-top:4px;">${esc(prefill.note || "")}</textarea>
       </div>
       <div class="mt-3">
+        <label class="text-sm font-medium">封面图链接（可选）</label>
+        <input id="pf-cover" class="input" style="margin-top:4px;" value="${esc(prefill.cover || "")}" placeholder="粘贴图片 URL（http(s) 或 data:image），留空则显示行业占位图" />
+      </div>
+      <div class="mt-3">
         <label class="text-sm font-medium">提示词正文（将发布的内容）</label>
         <pre id="pf-prompt" class="code-box" style="margin-top:4px;white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;">${esc(prefill.prompt || "")}</pre>
       </div>
@@ -98,11 +117,12 @@ export function openPublishForm(prefill: any): void {
     const tags = (document.getElementById("pf-tags") as HTMLInputElement).value.split(/[,，、]/).map(s => s.trim()).filter(Boolean).slice(0, 8);
     const author = (document.getElementById("pf-author") as HTMLInputElement).value.trim() || "匿名";
     const note = (document.getElementById("pf-note") as HTMLTextAreaElement).value.trim();
+    const cover = (document.getElementById("pf-cover") as HTMLInputElement).value.trim();
     const industry = (document.getElementById("pf-industry") as HTMLSelectElement).value;
     submitBtn.disabled = true; submitBtn.style.opacity = ".55";
     (document.getElementById("pf-msg") as HTMLElement).textContent = "发布中…";
     try {
-      const pubRes = await LLM.communityPublish({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, industry, author, tags, note, prompt });
+      const pubRes = await LLM.communityPublish({ id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8), title, industry, author, tags, note, cover, prompt });
       close();
       toast("✓ 已发布到草稿「" + title + "」，去社区广场-我的发布里点「公开」即可上架");
       // 发布去重（C3）：后端附带的相似模板提示，不打断流程
@@ -189,6 +209,7 @@ export async function community(): Promise<void> {
         <option value="rating">评分最高</option>
       </select>
     </div>
+    <div id="cm-tags" class="cm-tagcloud mt-3"></div>
     <div id="cm-stats" class="community-stats mt-3"></div>
     <div id="cm-wrap" class="mt-4">加载中…</div>
   `;
@@ -218,6 +239,20 @@ export async function community(): Promise<void> {
         let extra = "";
         if (tab === "square" && summaryCache && summaryCache.todayPublished) extra = ` · ✨ 今日新增 <b>${summaryCache.todayPublished}</b> 条`;
         statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业${extra} · 变量化模板，填一句目标即可生成`;
+      }
+      // 标签云（提案③）：按当前列表标签出现频率排序，点击即按该标签过滤
+      const tagCount: Record<string, number> = {};
+      (rows || []).forEach((r: any) => (r.tags || []).forEach((t: any) => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+      const tagsArr = Object.entries(tagCount).sort((a: any, b: any) => b[1] - a[1]).slice(0, 20).map(([t, c]) => ({ t, c }));
+      const tagEl = (document.getElementById("cm-tags") as HTMLElement);
+      if (tagEl) {
+        tagEl.innerHTML = tagsArr.length
+          ? `<span class="muted" style="font-size:.75rem;margin-right:6px;">🔖 热门标签</span>` + tagsArr.map((x: any) => `<button class="cm-tag" data-tag="${esc(x.t)}">#${esc(x.t)} <span class="cm-tag-c">${x.c}</span></button>`).join("")
+          : "";
+        tagEl.querySelectorAll(".cm-tag").forEach(b => b.addEventListener("click", () => {
+          if (qEl) qEl.value = b.getAttribute("data-tag") || "";
+          load();
+        }));
       }
       wrap.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => { location.hash = "#/c/" + encodeURIComponent(c.getAttribute("data-id")); }));
       if (tab === "mine") {
@@ -249,6 +284,13 @@ export async function community(): Promise<void> {
       wrap.querySelectorAll(".cm-report").forEach(b => b.addEventListener("click", (e) => {
         e.stopPropagation();
         reportDialog(b.getAttribute("data-id"), b.getAttribute("data-title"));
+      }));
+      // 列表卡片「🚀 试跑」：复用 F20 示例预览逻辑（用户自带 Key，本地流式跑），降低决策成本
+      wrap.querySelectorAll(".cm-try").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = b.getAttribute("data-id");
+        const r = (rows || []).find((x: any) => x.id === id);
+        if (r) openPreviewModal(r);
       }));
     } catch (e) {
       const msg = (e as any) && (e as any).message ? (e as any).message : String(e);
@@ -377,6 +419,10 @@ export async function moderationConsole(reload: () => void | Promise<void>): Pro
 
 export function communityCard(r: any, tab: string): string {
   const tagHtml = (r.tags || []).map((t: any) => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
+  const coverHtml = r.cover
+    ? `<img class="cm-cover" src="${esc(r.cover)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
+    : `<div class="cm-cover cm-cover-ph" style="background:${industryPh(r.industry)}"><span>${esc((r.title || "?").slice(0, 1))}</span></div>`;
+  const relTime = fmtRelative(r.publishedAt || r.createdAt);
   const actions = tab === "mine"
     ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
          ${r.status === "draft"
@@ -387,22 +433,26 @@ export function communityCard(r: any, tab: string): string {
        </div>`
     : (tab === "square"
         ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
+             <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
              <button class="btn btn-ghost btn-sm cm-report" data-id="${esc(r.id)}" data-title="${esc(r.title)}">⚠ 举报</button>
              <span class="muted" style="font-size:.72rem;">已公开</span>
            </div>`
         : "");
-  return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;">
-    <div class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
-        <span class="pill pill-violet">${esc(r.industry)}</span>
+  return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;overflow:hidden;">
+    ${coverHtml}
+    <div class="cm-body">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
+          <span class="pill pill-violet">${esc(r.industry)}</span>
+        </div>
+        <span class="text-xs muted">${relTime ? esc(relTime) + " · " : ""}${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
       </div>
-      <span class="text-xs muted">${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
+      <h3 style="margin-top:6px;">${esc(r.title)}</h3>
+      <div class="mt-1">${tagHtml}</div>
+      <div class="muted" style="font-size:.75rem;margin-top:6px;">🔥 ${r.uses} 次使用 · ⭐ ${r.favorites} 收藏${r.note ? " · " + esc(r.note) : ""}</div>
+      ${actions}
     </div>
-    <h3 style="margin-top:6px;">${esc(r.title)}</h3>
-    <div class="mt-1">${tagHtml}</div>
-    <div class="muted" style="font-size:.75rem;margin-top:6px;">🔥 ${r.uses} 次使用 · ⭐ ${r.favorites} 收藏${r.note ? " · " + esc(r.note) : ""}</div>
-    ${actions}
   </div>`;
 }
 
@@ -419,7 +469,8 @@ export async function communityDetail(id: string): Promise<void> {
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.6rem;">${esc(row.title)}</h1>
-      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}</div>
+      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}${fmtRelative(row.publishedAt || row.createdAt) ? " · " + esc(fmtRelative(row.publishedAt || row.createdAt)) : ""}</div>
+      ${row.cover ? `<img class="cm-cover" src="${esc(row.cover)}" alt="" style="margin-top:10px;border-radius:10px;max-height:240px;width:100%;object-fit:cover;" onerror="this.style.display='none'" />` : `<div class="cm-cover-ph" style="background:${industryPh(row.industry)};margin-top:10px;"><span>${esc((row.title || "?").slice(0, 1))}</span></div>`}
     </div>
     <div class="mt-2">${tagHtml}</div>
     ${row.note ? `<p class="slate" style="margin-top:10px;line-height:1.6;">${esc(row.note)}</p>` : ""}
@@ -437,7 +488,7 @@ export async function communityDetail(id: string): Promise<void> {
       <button id="cm-clone" class="btn btn-primary btn-sm">🍴 派生 / Remix</button>
       <button id="cm-fav" class="btn btn-ghost btn-sm">⭐ 收藏</button>
       <button id="cm-test-open" class="btn btn-ghost btn-sm">🧪 测试这个提示词</button>
-      <button id="cm-prev" class="btn btn-ghost btn-sm">🔍 示例预览</button>
+      <button id="cm-prev" class="btn btn-ghost btn-sm">🚀 一键试跑</button>
       <button id="cm-addcol" class="btn btn-ghost btn-sm">📚 加入合集</button>
       ${row.status === "published" ? '<button id="cm-report" class="btn btn-ghost btn-sm">⚠ 举报</button>' : ""}
     </div>

@@ -270,6 +270,7 @@ export interface CommunityRow {
   prompt: string;
   tags: string[];
   note: string;
+  cover: string | null;   // 封面图链接 / data URL（轻量版封面方案；空=无封面，前端显示行业占位图）
   status: string;
   createdAt: number;
   publishedAt: number | null;
@@ -286,7 +287,7 @@ function communityFromRow(r: any): CommunityRow {
   try { tags = JSON.parse(r.tags || "[]"); } catch { tags = []; }
   return {
     id: r.id, title: r.title, industry: r.industry, author: r.author, authorId: r.author_id ?? null,
-    prompt: r.prompt, tags, note: r.note, status: r.status,
+    prompt: r.prompt, tags, note: r.note, cover: r.cover ?? null, status: r.status,
     createdAt: r.created_at, publishedAt: r.published_at,
     uses: r.uses, favorites: r.favorites,
     ratingSum: r.rating_sum, ratingCount: r.rating_count,
@@ -294,7 +295,7 @@ function communityFromRow(r: any): CommunityRow {
   };
 }
 
-export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string }): CommunityRow {
+export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string; cover?: string }): CommunityRow {
   const now = Date.now();
   const normPrompt = (rec.prompt || "").trim();
   // 幂等去重（用户体验修复）：同一作者 + 相同标题 + 相同正文，视为重复发布，
@@ -304,16 +305,16 @@ export function publishCommunity(rec: { id: string; title: string; industry: str
       "SELECT * FROM community WHERE author_id=? AND title=? AND prompt=? AND status='draft'"
     ).get(rec.authorId, rec.title, normPrompt) as any;
     if (existing) {
-      db.prepare("UPDATE community SET industry=?, tags=?, note=?, created_at=? WHERE id=?")
-        .run(rec.industry, JSON.stringify(rec.tags || []), rec.note || "", now, existing.id);
+      db.prepare("UPDATE community SET industry=?, tags=?, note=?, cover=?, created_at=? WHERE id=?")
+        .run(rec.industry, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", now, existing.id);
       return getCommunity(existing.id)!;
     }
   }
   // 作者名以服务端鉴权身份为准（authorId 绑定），杜绝客户端伪造"李鬼"。
   db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,'draft',?,NULL,0,0,0,0)`,
-  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", now);
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,'draft',?,NULL,0,0,0,0)`,
+  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", now);
   return getCommunity(rec.id)!;
 }
 
@@ -335,13 +336,13 @@ export function seedCommunityIfEmpty(): number {
   if (row && row.c > 0) return 0;
   const now = Date.now();
   const stmt = db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
   );
   let n = 0;
   for (const s of COMMUNITY_SEED) {
     const ts = now - n * 3600_000; // 每小时一篇，拉开发布时间，使「最新」排序有梯度
-    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
+    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, "", ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
     n++;
   }
   return n;

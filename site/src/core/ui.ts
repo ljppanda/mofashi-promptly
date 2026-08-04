@@ -98,6 +98,23 @@ export function fmtDateTime(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// 相对时间（"X 分钟前 / X 小时前 / X 天前"），用于社区新鲜度信号
+export function fmtRelative(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return "刚刚";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + " 分钟前";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + " 小时前";
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + " 天前";
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return mo + " 个月前";
+  return Math.floor(mo / 12) + " 年前";
+}
+
 // 行级文本差异（LCS），用于模板版本对比；返回已转义并带高亮样式的 HTML 片段（红删 / 绿增 / 灰同）
 export function diffLines(a: string, b: string): string {
   const A = String(a == null ? "" : a).split("\n");

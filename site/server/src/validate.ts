@@ -18,6 +18,7 @@ export const LIMITS = {
   INDUSTRY: 50,        // 行业
   PROXY_BASE: 300,     // 代理 base URL
   EMAIL: 254,          // 邮箱（RFC 5321 上限）
+  COVER: 3_000_000,    // 封面图（data URL 上限，外链通常远小于此）
 } as const;
 
 // 对指定字段做长度/规模校验；字符串按字符数，对象/数组按 JSON 序列化长度近似。
@@ -44,7 +45,14 @@ export function validateCommunityDraft(p: any): string[] {
     note: LIMITS.NOTE,
     author: LIMITS.AUTHOR,
     industry: LIMITS.INDUSTRY,
+    cover: LIMITS.COVER,
   });
+  // 封面：仅允许 http(s) 外链或 data:image 图片（防止注入非图片内容）；空串/缺省放行
+  if (typeof p?.cover === "string" && p.cover) {
+    const c = p.cover;
+    const ok = /^https?:\/\//i.test(c) || /^data:image\/(png|jpe?g|gif|webp|avif|svg\+xml);base64,/i.test(c);
+    if (!ok) errs.push("封面仅支持 http(s) 图片链接或 data:image 图片");
+  }
   if (Array.isArray(p?.tags)) {
     if (p.tags.length > LIMITS.TAGS_MAX) errs.push(`标签数量超过上限 ${LIMITS.TAGS_MAX}`);
     for (const t of p.tags) {

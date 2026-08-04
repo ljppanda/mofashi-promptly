@@ -53,6 +53,8 @@ export const MIGRATIONS: Migration[] = [
       )`);
       // 兼容旧库：给 community 补 author_id 列（绑定发布者，杜绝作者名伪造 + 支持「我的发布」按用户过滤）
       try { db.exec("ALTER TABLE community ADD COLUMN author_id TEXT"); } catch { /* 已存在则忽略 */ }
+      // 兼容旧库：给 community 补 cover 列（封面图链接 / data URL，轻量版封面方案，空串=无封面）
+      try { db.exec("ALTER TABLE community ADD COLUMN cover TEXT"); } catch { /* 已存在则忽略 */ }
       db.exec(`CREATE TABLE IF NOT EXISTS reports(
         id TEXT PRIMARY KEY,
         item_id TEXT NOT NULL,
@@ -159,6 +161,15 @@ export const MIGRATIONS: Migration[] = [
       )`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_coll_items_coll ON collection_items(collection_id, position)`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_coll_items_item ON collection_items(item_id)`);
+    },
+  },
+  {
+    version: 6,
+    name: "community_cover_2026_08_04",
+    up: (db) => {
+      // 社区模板封面图（轻量版封面方案，报告 #1）：封面图链接 / data URL，空串=无封面。
+      // 幂等 ALTER：已应用过（如全新库在 v1 基线已加）则忽略，避免破坏老库。
+      try { db.exec("ALTER TABLE community ADD COLUMN cover TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
     },
   },
 ];
