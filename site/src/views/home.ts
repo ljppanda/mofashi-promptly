@@ -5,6 +5,7 @@ import { ctx } from "../core/ctx.js";
 import { esc, setMeta } from "../core/ui.js";
 import { ICON } from "../core/config.js";
 import { handleGenerate } from "./generate.js";
+import { communityCard } from "./community.js";
 
 function industries(): string[] {
   const out: string[] = [];
@@ -188,8 +189,11 @@ export function home(): void {
       <div id="ind-dist" class="card" style="padding:16px 18px;"></div>
     </section>
 
-    <!-- 热门模板 Top5 -->
+    <!-- 热门模板 Top5（内置精选） -->
     <div id="hot-strip" class="mt-5"></div>
+
+    <!-- 大家都在用（社区热门模板，带封面社会证明） -->
+    <div id="hot-community" class="mt-5"></div>
 
     <!-- 搜索 -->
     <div style="margin-top:36px;">
@@ -211,6 +215,7 @@ export function home(): void {
   `;
   renderList("");
   loadHotStrip();
+  loadCommunityStrip();
   // 从行业落地页点「生成自定义模板」回来时，预选行业并聚焦输入框
   if (pendingIndustry) {
     const sel = (document.getElementById("gen-industry") as HTMLSelectElement | null);
@@ -262,7 +267,23 @@ export async function loadHotStrip(): Promise<void> {
   } catch { /* 热度榜不可用时首页不报错 */ }
 }
 
-// 行业页（提案3 · 职业垂类 SEO 落地页）
+// 首页“大家都在用”（社区热门模板，带封面社会证明，与上方内置「热门模板」互补）
+export async function loadCommunityStrip(): Promise<void> {
+  const el = (document.getElementById("hot-community") as HTMLElement);
+  if (!el) return;
+  try {
+    const rows: any[] = await LLM.communityList({ status: "published", sort: "heat", limit: 6 });
+    if (!rows || !rows.length) return;
+    el.innerHTML = `<h2 class="section-title" style="margin-top:8px;">🌟 大家都在用</h2>
+      <p class="muted" style="font-size:.82rem;margin-top:4px;">社区里最受欢迎的模板，点开即可试跑或派生。</p>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">${rows.map((r: any) => communityCard(r, "rec")).join("")}</div>`;
+    // 卡片点击跳详情（communityCard 在非 mine/square 下只展示，不挂操作按钮）
+    el.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => {
+      const id = c.getAttribute("data-id");
+      if (id) location.hash = "#/c/" + encodeURIComponent(id);
+    }));
+  } catch { /* 社区列表不可用时首页不报错 */ }
+}
 export function industry(name: string): void {
   const list = TEMPLATES.filter(t => t.industry === name);
   const intro = INDUSTRY_INTRO[name] || INDUSTRY_INTRO["其他"];

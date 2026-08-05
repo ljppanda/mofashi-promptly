@@ -5,10 +5,10 @@ import { esc, setMeta, toast } from "../core/ui.js";
 import { LLM } from "../llm.js";
 import { communityCard, reportDialog } from "./community.js";
 
-function collectionCard(c: any): string {
+function collectionCard(c: any, hot = false): string {
   return `<div class="card tpl-card col-card" data-id="${esc(c.id)}" style="margin-top:12px;cursor:pointer;">
     <div class="flex items-center justify-between">
-      <span class="pill pill-violet">📚 合集</span>
+      <span class="pill pill-violet">📚 合集${hot ? ' · 🔥 热门' : ''}</span>
       <span class="text-xs muted">${c.authorId ? `<a href="#/u/${esc(c.authorId)}" class="author-link">${esc(c.author)}</a>` : esc(c.author)} · ${c.itemCount || 0} 个模板</span>
     </div>
     <h3 style="margin-top:6px;">${esc(c.title)}</h3>
@@ -80,7 +80,7 @@ export async function collectionsPage(): Promise<void> {
       <h1 class="section-title" style="font-size:1.7rem;">📚 合集</h1>
       <button id="col-new" class="btn btn-primary btn-sm">＋ 新建合集</button>
     </div>
-    <p class="muted mt-2" style="font-size:.85rem;">把同类提示词收进一个合集，方便自己回看，也方便别人发现好内容。</p>
+    <p class="muted mt-2" style="font-size:.85rem;">把同类提示词收进一个合集，方便自己回看，也方便别人发现好内容。🔥 已按模板数排序，看看大家都在收藏什么。</p>
     <div id="col-wrap" class="mt-4">加载中…</div>
   `;
   const newBtn = (document.getElementById("col-new") as HTMLButtonElement);
@@ -97,7 +97,9 @@ async function loadCollections(): Promise<void> {
       wrap.innerHTML = '<p class="muted">还没有合集，点右上角「新建合集」创建第一个吧。</p>';
       return;
     }
-    wrap.innerHTML = rows.map(collectionCard).join("");
+    // 热门合集：按模板数降序（合集无 favorites 字段，以模板数作社会证明）
+    rows.sort((a: any, b: any) => (b.itemCount || 0) - (a.itemCount || 0));
+    wrap.innerHTML = rows.map((c: any, i: number) => collectionCard(c, i === 0 && (c.itemCount || 0) > 0)).join("");
     wrap.querySelectorAll(".col-card").forEach(c => c.addEventListener("click", () => {
       location.hash = "#/col/" + encodeURIComponent(c.getAttribute("data-id"));
     }));

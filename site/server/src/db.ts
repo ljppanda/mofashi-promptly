@@ -352,7 +352,7 @@ seedCommunityIfEmpty();
 
 export interface CommunityListOpts {
   status?: string;
-  sort?: "heat" | "new" | "rating";
+  sort?: "heat" | "new" | "rating" | "favorites" | "uses";
   q?: string;
   industry?: string;
   limit?: number;
@@ -378,6 +378,8 @@ export function listCommunity(opts: CommunityListOpts = {}): CommunityRow[] {
   }
   if (sort === "new") sql += " ORDER BY COALESCE(published_at, created_at) DESC";
   else if (sort === "rating") sql += " ORDER BY (CASE WHEN rating_count>0 THEN rating_sum*1.0/rating_count ELSE 0 END) DESC, rating_count DESC";
+  else if (sort === "favorites") sql += " ORDER BY favorites DESC, uses DESC";
+  else if (sort === "uses") sql += " ORDER BY uses DESC, favorites DESC";
   else sql += " ORDER BY (uses + favorites*2 + CASE WHEN rating_count>0 THEN rating_sum*1.0/rating_count*rating_count ELSE 0 END) DESC";
   sql += " LIMIT ? OFFSET ?";
   params.push(limit, offset);
