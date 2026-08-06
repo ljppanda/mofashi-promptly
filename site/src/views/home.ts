@@ -118,6 +118,11 @@ export function home(): void {
       <div><div class="stat-num"><span id="trust-community">—</span> <span class="u">条</span></div><div class="stat-label">社区已发布</div></div>
     </div>
     <div id="trust-line" class="muted" style="font-size:.82rem;margin-top:10px;"></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:.82rem;color:#475569;">
+      <span>🔒 <b>API Key 仅存你本机浏览器</b>，平台不托管额度、不拿你的数据训练</span>
+      <span>🧩 <b>19 家主流模型直连</b>，自带 Key 即用</span>
+      <a href="#/models" style="color:#6d28d9;font-weight:600;">查看支持的模型 →</a>
+    </div>
 
     <!-- 为什么不一样 -->
     <section class="section">
