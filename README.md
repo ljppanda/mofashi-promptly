@@ -108,6 +108,7 @@ site/src/
 | F21 | 社区体验增强（竞品监控 r6） | ① **封面轻量版**：社区模板支持封面（http(s) 链接或 `data:image`），列表 / 详情展示，无封面回退行业渐变占位图；发布表单接受封面，`validate` 限 3MB 且仅放行 http(s)/`data:image`（拦截 `javascript:` 等注入）；`community` 表 `cover` 列（v6 迁移）。② **🚀 在线试跑**：社区卡片 + 详情页「🚀 一键试跑」，复用 F20 的 `openPreviewModal`（用户自带 Key 本地流式跑示例，零服务端改动）。③ **标签云 + 相对时间**：社区列表 top20 频率标签云（点击填入搜索框）；相对时间 `fmtRelative`（刚刚 / X 分钟前 / …） |
 | F22 | 首页社区热门 + 热门合集榜（竞品监控 r7） | ① 首页「🌟 大家都在用」：复用 `communityCard` 拉取社区 `heat` 排序 Top6，点击进入社区详情。② **热门合集榜**：合集列表按模板数排序，Top1 带「🔥 热门」徽标。两者均为纯前端增强，零 schema 改动 |
 | F23 | 公开「模型支持」矩阵页 + 隐私信任徽标（竞品监控 r8） | 新增 `#/models` 落地页：复用 `LLM.PROVIDERS` 展示 **19 家厂商 + 内置模型矩阵**，并提供「🔄 拉取当前设置厂商真实在役模型」（复用 F12 的 `LLM.listModels`，含失败回退 + 提示）；首页信任条下方加隐私卖点（**API Key 仅存本机浏览器、平台不训练你的数据**）+ 跳转移模型页链接。补 SEO 落地页 + 专业信任，纯前端、零 schema |
+| F24 | 社区卡片 fork+优化常驻 + 排序补全（竞品监控 r9） | ① 社区 square 卡片新增常驻 **🍴 派生**（复用 F11 `remixToMine`，一键 fork 到「我的模板」带 `forkedFrom` 来源标记）与 **🔧 优化**（复用 F13 `openOptimizeModal`，采用时自动存为我的模板副本、不改写原社区模板）按钮，对标 PromptForge Gallery 的 forkable + ChatGPT Pro Tools 优化器前置；② 列表排序 `cm-sort` 补全 **收藏最多 / 使用最多**（后端 r7 已支持 favorites/uses，前端此前缺 option）。纯前端、零 schema |
 
 ---
 
@@ -252,6 +253,7 @@ git push origin main           # 不再需要任何 PAT
 - **生成质量升到生产级（回应"做提示词的网站自己产出的提示词却很水"）**：① F1 `draft` 与 F2 `use` 元提示词升级到 v2，强制产出 角色/背景/目标/约束与禁止项/工作流/输出规范(含格式示例)/边界与兜底/自检 七段生产级结构（前后端 prompt 注册表 `prompts.ts` + 前端直连 `llm.ts` 同步升级）；② F2 新增**自检回路**——首稿生成后对照生产级清单批判并改写一次（前端 `useTemplate(selfCheck)` + 服务端 `runAgentUse` 均实现，逼近人工优化效果，多一次调用）；③ 橱窗同步升级：8 个官方种子模板（`COMMUNITY_SEED`）重写为生产级，并用脚本 `scripts/upgrade-templates.mjs` 把 102 个首页模板库（`templates.ts`）、RAG 语料（`data/templates.json`）、下载样例（`samples/*.json`）统一重写为同一生产级结构（保留各模板原有具体写法要求、补缺失章节）。改动零破坏性：`use`/`draft` 旧版 v1 保留可回滚，prompt 版本锁定机制不变
 - 社区体验增强（竞品监控报告 r6 / r7）：r6 落地 ① **封面轻量版**（`community` 表 `cover` 列 v6 迁移 + `validate` 格式白名单仅放行 http(s)/`data:image`、限 3MB、拦截 `javascript:` 注入 + 无封面回退行业渐变占位图）② **🚀 在线试跑**（社区卡片 / 详情页复用 F20 的 `openPreviewModal`，用户自带 Key 本地流式跑示例，零服务端改动）③ **标签云**（社区列表 top20 频率标签，点击填入搜索框）+ **相对时间**（`fmtRelative`）；r7 落地 ① 首页「🌟 大家都在用」社区 `heat` Top6 模块（复用 `communityCard`）② **热门合集榜**（合集按模板数排序 + 🔥 热门徽标）。r7 报告其余建议（封面自动截图 / 二级下钻 / 创作者榜 / SEO 落地页 / 策展包 / Agent API）经评估暂不在当前迭代范围
 - 公开「模型支持」矩阵页 + 隐私信任徽标（竞品监控报告 r8）：报告 #1「社区卡片社会证明」经代码核查**已落地**（社区卡片早已展示 uses/favorites/avgRating + 官方/社区徽章，报告因前端 SPA 未启动误判），跳过；本轮落地 #4 **公开模型矩阵页 `#/models`**——复用 `LLM.PROVIDERS` 渲染 19 家厂商 + 内置模型矩阵，提供「🔄 拉取当前设置厂商真实在役模型」（复用 F12 `LLM.listModels`，失败回退 + 提示），并把「API Key 仅存浏览器本地、平台不训练你的数据」做成首页信任条下的隐私卖点 + 模型页隐私横幅，补 SEO 落地页与专业信任。r8 其余建议（#2 轻量增强钩子 / #3 Deploy API / #5 Playbook 策展包 / #6 浏览器扩展 / #7 团队共享）经评估暂不在当前迭代范围
+- 社区卡片 fork + 优化常驻 + 排序补全（竞品监控报告 r9）：报告再次误判「社区卡片社会证明未显性化」（实际 r8 已核，卡片早已展示 uses/favorites/avgRating + 来源徽章，跳过）；真正落地 ① 社区 square 卡片新增常驻 **🍴 派生**（`remixToMine` 从详情页内联逻辑抽成复用导出函数，fork 到「我的模板」带 `forkedFrom` 来源标记，形成完整 Remix 闭环）与 **🔧 优化**（复用 F13 `openOptimizeModal`，采用时 `Store.addMine` 落为我的副本、不改写原社区模板，安全）② 列表排序 `cm-sort` 补全「收藏最多 / 使用最多」（后端 r7 已支持 favorites/uses，前端此前缺 option）。r9 其余建议——#1 模板 Consume API（中，后端只读 + 限流）、#3 F13 优化器进一步前置到首页 / 生成结果区、#4 版本 stable/latest 频道、#5 发布前 QA 闸门、#6 浏览器扩展（高）——经评估暂不在当前迭代范围
 
 **后续改进方向（按优先级）**：
 

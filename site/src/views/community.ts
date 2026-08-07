@@ -9,6 +9,28 @@ import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
 import { openPreviewModal } from "./preview.js";
 import { loadSummary } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
+import { openOptimizeModal } from "./optimize.js"; // r9：社区卡片「🔧 优化」入口（复用 F13）
+
+// r9：把社区模板派生为「我的模板」（带来源标记），复用 F11 Remix 闭环；详情页与列表卡片共用
+export function remixToMine(row: any, prompt?: string): void {
+  const tpl: any = {
+    slug: "fork-" + row.id + "-" + Date.now().toString(36),
+    title: row.title + "（派生）",
+    industry: row.industry,
+    task: "社区派生",
+    summary: row.note || "从社区派生的提示词",
+    tags: row.tags || [],
+    prompt: prompt !== undefined ? prompt : row.prompt,
+    variables: [],
+    mine: true,
+    generated: false,
+    forkedFrom: row.id,
+    forkedFromTitle: row.title,
+  };
+  Store.addMine(tpl);
+  toast("✓ 已派生到「我的模板」，可直接编辑改造");
+  location.hash = "#/t/" + tpl.slug; // 跳详情页（canEdit 因 forkedFrom 为真），改造后可再「发布到社区」
+}
 
 // 公开前重复确认（#6 反垃圾去重）：后端在 publish-now 命中相似模板时返回 needsConfirm，
 // 这里弹确认框，用户确认后带 confirmDuplicate 重调才真正公开。返回最终状态供调用方决定是否刷新列表。
@@ -207,6 +229,8 @@ export async function community(): Promise<void> {
         <option value="heat">最热</option>
         <option value="new">最新</option>
         <option value="rating">评分最高</option>
+        <option value="favorites">收藏最多</option>
+        <option value="uses">使用最多</option>
       </select>
     </div>
     <div id="cm-tags" class="cm-tagcloud mt-3"></div>
@@ -291,6 +315,20 @@ export async function community(): Promise<void> {
         const id = b.getAttribute("data-id");
         const r = (rows || []).find((x: any) => x.id === id);
         if (r) openPreviewModal(r);
+      }));
+      // r9：列表卡片「🍴 派生」——复用 F11 Remix 闭环，fork 到我的模板
+      wrap.querySelectorAll(".cm-fork").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = b.getAttribute("data-id");
+        const r = (rows || []).find((x: any) => x.id === id);
+        if (r) remixToMine(r);
+      }));
+      // r9：列表卡片「🔧 优化」——复用 F13 一键优化，采用时自动存为我的模板副本（不改写原社区模板）
+      wrap.querySelectorAll(".cm-opt").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = b.getAttribute("data-id");
+        const r = (rows || []).find((x: any) => x.id === id);
+        if (r) openOptimizeModal({ ...r, slug: r.slug || ("opt-" + r.id) });
       }));
     } catch (e) {
       const msg = (e as any) && (e as any).message ? (e as any).message : String(e);
@@ -434,6 +472,8 @@ export function communityCard(r: any, tab: string): string {
     : (tab === "square"
         ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
              <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
+             <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
+             <button class="btn btn-ghost btn-sm cm-opt" data-id="${esc(r.id)}">🔧 优化</button>
              <button class="btn btn-ghost btn-sm cm-report" data-id="${esc(r.id)}" data-title="${esc(r.title)}">⚠ 举报</button>
              <span class="muted" style="font-size:.72rem;">已公开</span>
            </div>`
@@ -578,26 +618,7 @@ export async function communityDetail(id: string): Promise<void> {
   }
   document.querySelectorAll("#cm-rate-stars .star").forEach(s => s.addEventListener("click", () => cRate(row, Number(s.getAttribute("data-n")))));
   const cloneBtn = (document.getElementById("cm-clone") as HTMLButtonElement);
-  if (cloneBtn) cloneBtn.addEventListener("click", () => {
-    // Remix/Fork：克隆升级为「带来源的派生」——跳详情页可直接编辑、改完可再发布回社区，形成完整 Remix 闭环。
-    const tpl = {
-      slug: "fork-" + row.id + "-" + Date.now().toString(36),
-      title: row.title + "（派生）",
-      industry: row.industry,
-      task: "社区派生",
-      summary: row.note || "从社区派生的提示词",
-      tags: row.tags || [],
-      prompt: ctx.cCurrentPrompt,
-      variables: [],
-      mine: true,
-      generated: false,
-      forkedFrom: row.id,
-      forkedFromTitle: row.title,
-    };
-    Store.addMine(tpl);
-    toast("✓ 已派生到「我的模板」，可直接编辑改造");
-    location.hash = "#/t/" + tpl.slug; // 跳详情页（canEdit 因 forkedFrom 为真），改造后可再「发布到社区」
-  });
+  if (cloneBtn) cloneBtn.addEventListener("click", () => remixToMine(row, ctx.cCurrentPrompt));
   const favBtn = (document.getElementById("cm-fav") as HTMLButtonElement);
   const reportBtn = (document.getElementById("cm-report") as HTMLButtonElement);
   if (reportBtn) reportBtn.addEventListener("click", () => reportDialog(row.id, row.title));
