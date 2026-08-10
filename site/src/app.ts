@@ -16,6 +16,7 @@ import { community, communityDetail } from "./views/community.js";
 import { authorPage } from "./views/author.js";
 import { collectionsPage, collectionDetailPage } from "./views/collections.js";
 import { modelsPage } from "./views/models.js";
+import { guidePage } from "./views/guide.js";
 import { traces } from "./views/traces.js";
 import { openImportFile } from "./views/import.js";
 
@@ -43,6 +44,7 @@ function route(): void {
     case "collections": collectionsPage(); break;
     case "col": collectionDetailPage(decodeURIComponent(parts[1] || "")); break;
     case "models": modelsPage(); break;
+    case "guide": guidePage(); break;
     case "traces": traces(); break;
     default: home();
   }

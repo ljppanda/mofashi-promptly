@@ -124,6 +124,32 @@ export function home(): void {
       <a href="#/models" style="color:#6d28d9;font-weight:600;">查看支持的模型 →</a>
     </div>
 
+    <!-- 3 步上手（报告 r10 #3：降低首访门槛） -->
+    <section class="section" style="padding-top:8px;">
+      <h2 class="section-title" style="font-size:1.3rem;margin-top:18px;">3 步上手</h2>
+      <p class="section-sub">从「一段话」到「可复用的模板」，只要三步。</p>
+      <div class="feat-grid">
+        <div class="feat" style="cursor:default;">
+          <div class="feat-ico">🧩</div>
+          <h4>① 选 / 写模板</h4>
+          <p>一句话生成（F1），或从首页模板库、社区挑一条带 <code>{{变量}}</code> 的骨架。</p>
+        </div>
+        <div class="feat" style="cursor:default;">
+          <div class="feat-ico">✍️</div>
+          <h4>② 填变量生成</h4>
+          <p>填完占位符，F2 自动实例化成可直接发给模型的成品提示词（含七段生产级结构）。</p>
+        </div>
+        <div class="feat" style="cursor:default;">
+          <div class="feat-ico">🚀</div>
+          <h4>③ 试跑 / 优化 / 发布</h4>
+          <p>本地试跑验证、AI 一键优化、派生改造，满意了发布到社区共享。</p>
+        </div>
+      </div>
+      <div style="margin-top:14px;">
+        <a href="#/guide" class="btn btn-ghost btn-sm">📖 不懂「变量化 / 生产级结构」？看 5 分钟入门 →</a>
+      </div>
+    </section>
+
     <!-- 为什么不一样 -->
     <section class="section">
       <h2 class="section-title">为什么不一样</h2>

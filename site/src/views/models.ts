@@ -4,6 +4,7 @@
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { esc, toast } from "../core/ui.js";
+import { ALL_INDUSTRIES } from "../core/config.js";
 
 export function modelsPage(): void {
   const root = document.getElementById("app") as HTMLElement | null;
@@ -26,6 +27,26 @@ export function modelsPage(): void {
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
         <button id="models-fetch" class="btn btn-ghost btn-sm" type="button" title="从厂商接口实时拉取当前设置厂商的在役模型">🔄 拉取当前设置厂商的真实在役模型</button>
         <a href="#/settings" class="btn btn-primary btn-sm">去设置填 Key →</a>
+      </div>
+
+      <!-- 合规与数据主权（报告 r10 #7：强化 B 端/团队信任） -->
+      <div style="border:1px solid #e2e8f0;border-radius:14px;padding:16px;background:#f8fafc;margin-bottom:18px;">
+        <h2 class="section-title" style="font-size:1.05rem;margin-bottom:10px;">🛡️ 数据不出域 · 合规说明</h2>
+        <ul style="line-height:1.9;padding-left:20px;font-size:.88rem;margin:0;color:#334155;">
+          <li><b>Key 永不离开你的设备</b>：API Key 只存浏览器 <code>localStorage</code>，服务端收不到、不托管、不落库。</li>
+          <li><b>调用直连厂商</b>：你的提示词与内容经服务端<b>白名单转发</b>（仅放行厂商公网域名，拒绝内网/私有地址，防 SSRF），不经任何第三方训练。</li>
+          <li><b>自托管友好</b>：整套站点可私有化部署在你自己的服务器，数据完全自主。</li>
+          <li><b>社区内容审核</b>：公开模板经 AI 软审核 + 人工审核台 + 用户举报三重把关。</li>
+        </ul>
+        <div class="muted" style="font-size:.78rem;margin-top:10px;">说明：本页为产品信任陈述，非法律合规意见书；若用于受监管行业（金融 / 医疗 / 政务），请结合自身合规要求评估。</div>
+      </div>
+
+      <!-- 行业场景占位墙（r10 #7：增强 B 端场景联想） -->
+      <div style="margin-bottom:18px;">
+        <div class="muted" style="font-size:.82rem;margin-bottom:8px;">已覆盖的场景（模板可按行业筛选）：</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${ALL_INDUSTRIES.map((b) => `<span style="background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:5px 12px;font-size:.8rem;color:#475569;">${esc(b)}</span>`).join("")}
+        </div>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
