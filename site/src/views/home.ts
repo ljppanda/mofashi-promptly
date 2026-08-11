@@ -6,6 +6,7 @@ import { esc, setMeta } from "../core/ui.js";
 import { ICON } from "../core/config.js";
 import { handleGenerate } from "./generate.js";
 import { communityCard } from "./community.js";
+import { openPreviewModal } from "./preview.js";
 
 function industries(): string[] {
   const out: string[] = [];
@@ -291,10 +292,22 @@ export async function loadHotStrip(): Promise<void> {
     const rows = await (await fetch("/metrics/board?sort=heat&limit=5")).json();
     if (!rows || !rows.length) return;
     el.innerHTML = `<h2 class="section-title" style="margin-top:8px;">🔥 热门模板</h2>
-      <div class="grid sm:grid-cols-2 gap-3 mt-3">${rows.map(r => `<a href="#/t/${encodeURIComponent(r.id)}" class="card tpl-card hot">
-        <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}</span></div>
-        <h3>${esc(r.title)}</h3>
-      </a>`).join("")}</div>`;
+      <div class="grid sm:grid-cols-2 gap-3 mt-3">${rows.map(r => {
+        const tpl = TEMPLATES.find(t => t.slug === r.id);
+        const tryBtn = tpl ? `<button class="btn btn-primary btn-sm hot-try" data-id="${esc(r.id)}" style="margin-top:8px;">🚀 试跑</button>` : "";
+        return `<a href="#/t/${encodeURIComponent(r.id)}" class="card tpl-card hot" data-id="${esc(r.id)}">
+          <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}</span></div>
+          <h3>${esc(r.title)}</h3>
+          ${tryBtn}
+        </a>`;
+      }).join("")}</div>`;
+    el.querySelectorAll(".hot-try").forEach(b => b.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const id = b.getAttribute("data-id");
+      const tpl = TEMPLATES.find(t => t.slug === id);
+      if (tpl) openPreviewModal(tpl);
+      else location.hash = "#/t/" + encodeURIComponent(id || "");
+    }));
   } catch { /* 热度榜不可用时首页不报错 */ }
 }
 
@@ -312,6 +325,13 @@ export async function loadCommunityStrip(): Promise<void> {
     el.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => {
       const id = c.getAttribute("data-id");
       if (id) location.hash = "#/c/" + encodeURIComponent(id);
+    }));
+    // 首页社区卡片「🚀 试跑」常驻入口（rec 分支已渲染 cm-try，对标 Gemini open-in-playground）
+    el.querySelectorAll(".cm-try").forEach(b => b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = b.getAttribute("data-id");
+      const r = (rows || []).find(x => x.id === id);
+      if (r) openPreviewModal(r);
     }));
   } catch { /* 社区列表不可用时首页不报错 */ }
 }

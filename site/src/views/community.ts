@@ -469,7 +469,7 @@ export function communityCard(r: any, tab: string): string {
          <button class="btn btn-ghost btn-sm cm-del" data-id="' + esc(r.id) + '">🗑 删除</button>
          <span class="muted" style="font-size:.72rem;">${r.status === "draft" ? "草稿（仅自己可见）" : "已公开"}</span>
        </div>`
-    : (tab === "square"
+        : (tab === "square"
         ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
              <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
              <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
@@ -477,7 +477,10 @@ export function communityCard(r: any, tab: string): string {
              <button class="btn btn-ghost btn-sm cm-report" data-id="${esc(r.id)}" data-title="${esc(r.title)}">⚠ 举报</button>
              <span class="muted" style="font-size:.72rem;">已公开</span>
            </div>`
-        : "");
+        : `<div class="flex gap-2 mt-2 flex-wrap items-center">
+             <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
+             <span class="muted" style="font-size:.72rem;">点开看完整卡片</span>
+           </div>`);
   return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;overflow:hidden;">
     ${coverHtml}
     <div class="cm-body">

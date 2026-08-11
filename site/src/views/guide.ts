@@ -60,8 +60,30 @@ export function guidePage(): void {
 交付前确认以上每段均已满足。</pre>
       </div>
 
-      <!-- 三、三步上手 -->
-      <h2 class="section-title" style="font-size:1.2rem;margin-top:30px;">③ 三步上手</h2>
+      <!-- 三、主流模型家族：风格差异与最佳实践 -->
+      <h2 class="section-title" style="font-size:1.2rem;margin-top:30px;">③ 主流模型家族：风格差异与最佳实践</h2>
+      <p class="section-sub" style="text-align:left;">不同厂商的模型「脾气」不同，顺着它们的特性写提示词，才能拿到最稳的效果（思路对标 OpenAI / Claude / Gemini 官方 Prompt Library）：</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0;">
+        ${FAMILY.map((f) => `
+          <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#fff;">
+            <div style="font-size:1.3rem;margin-bottom:6px;">${f.ico} <b style="color:#0f172a;">${esc(f.name)}</b></div>
+            <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:.84rem;" class="muted">
+              ${f.points.map((p) => `<li>${esc(p)}</li>`).join("")}
+            </ul>
+          </div>`).join("")}
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:10px 0;line-height:1.7;">
+        <div class="muted" style="font-size:.8rem;margin-bottom:8px;">🛡 <b style="color:#0f172a;">生产纪律（来自官方实践，值得抄作业）</b></div>
+        <ul style="margin:0;padding-left:20px;line-height:1.9;font-size:.9rem;">
+          <li><b>锁版本</b>：生产环境固定模型<b>快照 ID</b>（如 <code>gpt-4o-2024-08-06</code>），不裸用 <code>latest</code>，避免悄悄变体导致效果漂移。</li>
+          <li><b>建评测套件</b>：沉淀一组固定测试用例（数据集），每次改提示词都跑一遍回归，确保「优化」真优化而非退化 —— 呼应本站 F13 优化闭环可数据集化。</li>
+          <li><b>提示缓存降本</b>：把稳定不变的系统 / 背景段放前面，可命中共享缓存，长提示词成本可降数倍。</li>
+        </ul>
+        <p class="muted" style="font-size:.82rem;margin:10px 0 0;">本站已内建对应工具：F9 跨模型对比 + 成本预估、F10 版本历史 + diff/回滚、F13 LLM-as-Judge 优化闭环 —— 把上面的「锁版本 + 评测 + 降本」直接落地成按钮。</p>
+      </div>
+
+      <!-- 四、三步上手 -->
+      <h2 class="section-title" style="font-size:1.2rem;margin-top:30px;">④ 三步上手</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:14px 0;">
         ${STEPS.map((s) => `
           <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#fff;">
@@ -96,4 +118,37 @@ const STEPS: { ico: string; t: string; d: string }[] = [
   { ico: "🧩", t: "选 / 写模板", d: "一句话生成（F1），或从社区 / 首页模板库挑一条带变量的骨架" },
   { ico: "✍️", t: "填变量生成", d: "填完 {{占位符}}，F2 实例化成可直接发给模型的成品提示词" },
   { ico: "🚀", t: "试跑 / 优化 / 发布", d: "本地试跑验证、AI 优化改写、派生改造，满意了发布到社区" },
+];
+
+const FAMILY: { ico: string; name: string; points: string[] }[] = [
+  {
+    ico: "🟢",
+    name: "OpenAI",
+    points: [
+      "固定模型快照 ID（如 gpt-4o-2024-08-06），避免悄然升级",
+      "指令优先级 developer > user > system",
+      "Markdown + XML 结构化、少样本 (few-shot)",
+      "提示缓存 (prompt caching) 降本、结构化输出 (JSON schema)",
+    ],
+  },
+  {
+    ico: "🟠",
+    name: "Claude（Anthropic）",
+    points: [
+      "XML 标签 <tag> 结构化 + 少样本最稳",
+      "按家族分版：Opus 重质量 / Sonnet 均衡 / Haiku 快省",
+      "官方库多内联样本，可整页复制",
+      "长文本与严谨推理见长",
+    ],
+  },
+  {
+    ico: "🔵",
+    name: "Gemini（Google）",
+    points: [
+      "多模态原生：音频 / 视频 / 图像 / 代码 / 数学",
+      "任务卡片「在 AI Studio 打开」即运行",
+      "超长上下文友好",
+      "适合把提示词直接接进产品流水线",
+    ],
+  },
 ];
