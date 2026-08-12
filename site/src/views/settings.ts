@@ -90,7 +90,7 @@ export function settings(): void {
     const k = (document.getElementById("set-key") as HTMLInputElement).value.trim();
     const sec = (document.getElementById("set-secret") as HTMLInputElement);
     const secret = sec ? sec.value.trim() : "";
-    if (!k) { modelNote.textContent = "请先填写 API Key，再拉取真实模型列表。"; modelNote.className = "text-xs mb-4"; modelNote.style.color = "#b91c1c"; return; }
+    if (!k && p !== "ollama") { modelNote.textContent = "请先填写 API Key，再拉取真实模型列表（Ollama 本机运行可免 Key）。"; modelNote.className = "text-xs mb-4"; modelNote.style.color = "#b91c1c"; return; }
     refreshModels(p, k, secret);
   });
   (document.getElementById("set-save") as HTMLButtonElement).addEventListener("click", () => {
@@ -223,13 +223,13 @@ async function refreshModels(p: string, key: string, secret?: string): Promise<v
   if (btn) { btn.disabled = true; btn.style.opacity = ".6"; btn.textContent = "拉取中…"; }
   if (note) { note.textContent = "正在从 " + LLM.PROVIDERS[p].label + " 拉取在役模型列表…"; note.className = "text-xs muted mb-4"; note.style.color = ""; }
   try {
-    const ids = await LLM.listModels(p, key, secret);
+    const ids = await LLM.listModels(p, key, secret, false);
     if (ids && ids.length) {
       populateModels(p, ids);
       if (note) { note.textContent = "✓ 已从 " + LLM.PROVIDERS[p].label + " 拉取 " + ids.length + " 个在役模型（已缓存，下次离线可用）。"; note.className = "text-xs mb-4"; note.style.color = "#15803d"; }
     } else {
       populateModels(p);
-      if (note) { note.textContent = "⚠ " + LLM.PROVIDERS[p].label + " 暂不支持实时拉取或无可用列表，已回退内置清单（可在“自定义模型名”手填）。"; note.className = "text-xs mb-4"; note.style.color = "#b45309"; }
+      if (note) { note.textContent = "⚠ 未能拉取真实列表（Key 可能无效，或该厂商暂不支持 /models 实时拉取）；已回退内置清单，你也可在“自定义模型名”手填。"; note.className = "text-xs mb-4"; note.style.color = "#b45309"; }
     }
   } catch (e: any) {
     populateModels(p);

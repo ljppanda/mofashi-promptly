@@ -105,7 +105,9 @@ export const LLM = (function () {
     if (over && over.provider && PROVIDERS[over.provider]) {
       const p = PROVIDERS[over.provider];
       const model = (over.customModel && over.customModel.trim()) || over.model || p.default;
-      return { key: over.key, secret: over.secret, style: p.style, base: p.base, model, provider: over.provider, providerLabel: p.label };
+      // key/secret 缺失时回退当前已保存设置：同厂商覆盖（如优化闭环指定裁判模型）无需重复填 Key 即生效；跨厂商仍按需报「未配置 Key」
+      const cur = cfg();
+      return { key: over.key ?? cur.key, secret: over.secret ?? cur.secret, style: p.style, base: p.base, model, provider: over.provider, providerLabel: p.label };
     }
     return cfg();
   }
@@ -532,7 +534,7 @@ export const LLM = (function () {
   let orListCache = null; // 二级兜底源：OpenRouter 聚合目录（公开、无需 Key）
   // 厂商 → OpenRouter 前缀映射；命中后剥离前缀与 :free/:batch 后缀得到该厂商原生模型 ID
   const OR_FALLBACK = { openai: "openai", deepseek: "deepseek", moonshot: "moonshotai", qwen: "qwen", hunyuan: "tencent", grok: "x-ai", mistral: "mistralai", claude: "anthropic", gemini: "google" };
-  async function listModels(provider, key, secret) {
+  async function listModels(provider, key, secret, allowFallback = true) {
     const p = PROVIDERS[provider];
     if (!p || provider === "ernie") return null;
     if (modelCache.has(provider)) return modelCache.get(provider);
@@ -554,16 +556,21 @@ export const LLM = (function () {
       const r = await relayFetch(url, "GET", headers, undefined);
       if (r.ok) {
         const j = await r.json();
-        let ids = [];
-        if (p.style === "gemini") ids = (j.models || []).map(m => String(m.name || "").replace(/^models\//, "")).filter(Boolean);
-        else ids = (j.data || []).map(m => m.id).filter(Boolean);
+        let ids: any[] = [];
+        if (p.style === "gemini") ids = (j.models || []).map((m: any) => String(m.name || "").replace(/^models\//, "")).filter(Boolean);
+        else {
+          // 兼容多种响应形态：OpenAI 风格 {data:[{id}]}、Together 顶层数组、Perplexity {models:[{id}]}、部分厂商 {model_list:[...]}
+          const src: any = Array.isArray(j) ? j : (j.data || j.models || j.model_list || j.objects || []);
+          ids = (src || []).map((m: any) => m && (m.id || m.name || m.model)).filter(Boolean).map(String);
+        }
         ids = Array.from(new Set(ids));
         if (ids.length) { modelCache.set(provider, ids); try { localStorage.setItem(lsKey, JSON.stringify(ids)); } catch (e) {} return ids; }
       }
     } catch (e) {}
     // 二级兜底：自身拉不到（无 Key / 不可达 / 不支持），从 OpenRouter 聚合目录取该厂商真实型号
+    // allowFallback=false（如裁判模型场景）时不回退，避免列出无对应 Key 不可用的 OpenRouter 型号
     const pre = OR_FALLBACK[provider];
-    if (pre) {
+    if (pre && allowFallback) {
       try {
         if (!orListCache) {
           const orr = await relayFetch("https://openrouter.ai/api/v1/models", "GET", { "content-type": "application/json" }, undefined);

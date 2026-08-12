@@ -56,13 +56,17 @@ export async function judgeSample(
   targetOver: any = {},
   judgeOver: any = {},
   signal?: AbortSignal,
+  onStage?: (stage: string, label: string) => void,
 ): Promise<JudgeResult> {
   // 1) 用模板实例化出成品提示词（模型代写，用户只给目标）
+  onStage?.("instantiate", "① 实例化测试样本（生成成品提示词）");
   const { prompt: finalPrompt } = await LLM.useTemplate(template, goal, null, signal);
   // 2) 把成品提示词作为系统设定，goal 作为首个用户问题，跑被测模型
+  onStage?.("run", "② 调用被测模型生成答案");
   const ran = await LLM.chatWithPrompt(finalPrompt, [{ role: "user", content: goal }], null, signal, targetOver);
   const output = (ran && ran.text) || "";
   // 3) 裁判打分
+  onStage?.("judge", "③ 裁判模型打分中");
   const user = `目标：${goal}\n\n=== 被测输出 ===\n${output}\n\n请按 JSON 评分。`;
   const jt = await LLM.chatWithPrompt(JUDGE_SYSTEM, [{ role: "user", content: user }], null, signal, judgeOver);
   const obj = extractJSON((jt && jt.text) || "");
@@ -99,17 +103,26 @@ export async function aggregate(results: JudgeResult[]): Promise<JudgeAgg> {
 }
 
 // 批量评测（可并发控制：这里串行以避免把用户的 Key 打爆；带进度回调）。
+// onStage: (idx, total, stage, label) => void —— 透出每个样本内部「实例化/调模型/裁判」细粒度阶段，消除长等待黑盒。
 export async function judgeSamples(
   template: any,
   goals: string[],
   targetOver: any = {},
   judgeOver: any = {},
   onProgress?: (done: number, total: number, last?: JudgeResult) => void,
+  onStage?: (idx: number, total: number, stage: string, label: string) => void,
   signal?: AbortSignal,
 ): Promise<JudgeResult[]> {
   const out: JudgeResult[] = [];
   for (let i = 0; i < goals.length; i++) {
-    const r = await judgeSample(template, goals[i], targetOver, judgeOver, signal);
+    const r = await judgeSample(
+      template,
+      goals[i],
+      targetOver,
+      judgeOver,
+      signal,
+      onStage ? (stage, label) => onStage(i + 1, goals.length, stage, label) : undefined,
+    );
     out.push(r);
     if (onProgress) onProgress(i + 1, goals.length, r);
   }
