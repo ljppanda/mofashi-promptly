@@ -8,7 +8,7 @@ import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
 import { openPreviewModal } from "./preview.js";
-import { loadSummary } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
+import { loadSummary, renderIndustryDist } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
 import { openOptimizeModal } from "./optimize.js"; // r9：社区卡片「🔧 优化」入口（复用 F13）
 
 // r9：把社区模板派生为「我的模板」（带来源标记），复用 F11 Remix 闭环；详情页与列表卡片共用
@@ -235,6 +235,7 @@ export async function community(): Promise<void> {
     </div>
     <div id="cm-tags" class="cm-tagcloud mt-3"></div>
     <div id="cm-stats" class="community-stats mt-3"></div>
+    <div id="cm-ind-dist" class="mt-3"></div>
     <div id="cm-wrap" class="mt-4">加载中…</div>
   `;
   let tab = "square";
@@ -264,6 +265,13 @@ export async function community(): Promise<void> {
         if (tab === "square" && summaryCache && summaryCache.todayPublished) extra = ` · ✨ 今日新增 <b>${summaryCache.todayPublished}</b> 条`;
         statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业${extra} · 变量化模板，填一句目标即可生成`;
       }
+      // 行业×数量聚合计数（report-2026-08-12 #5）：基于当前列表本地聚合，点击跳行业落地页
+      const indMap: Record<string, number> = {};
+      rows.forEach((r: any) => { const k = r.industry || "其他"; indMap[k] = (indMap[k] || 0) + 1; });
+      const indCounts: { industry: string; count: number }[] = Object.keys(indMap)
+        .sort((a, b) => indMap[b] - indMap[a])
+        .map(k => ({ industry: k, count: indMap[k] }));
+      renderIndustryDist(document.getElementById("cm-ind-dist"), indCounts);
       // 标签云（提案③）：按当前列表标签出现频率排序，点击即按该标签过滤
       const tagCount: Record<string, number> = {};
       (rows || []).forEach((r: any) => (r.tags || []).forEach((t: any) => { tagCount[t] = (tagCount[t] || 0) + 1; }));
@@ -489,7 +497,7 @@ export function communityCard(r: any, tab: string): string {
           ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
           <span class="pill pill-violet">${esc(r.industry)}</span>
         </div>
-        <span class="text-xs muted">${relTime ? esc(relTime) + " · " : ""}${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
+        <span class="text-xs muted">${relTime ? esc(relTime) + " · " : ""}${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) + "/10" : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
       </div>
       <h3 style="margin-top:6px;">${esc(r.title)}</h3>
       <div class="mt-1">${tagHtml}</div>
@@ -825,7 +833,7 @@ export function cLoadRate(row: any): void {
   if (!info) return;
   highlightStarsC(row.id);
   const my = Store.getRating(row.id);
-  info.textContent = `当前均分 ${row.avgRating} 星 · ${row.ratingCount || 0} 人评分` + (my ? ` · 你给了 ${my} 星` : "");
+  info.textContent = `当前均分 ${row.avgRating}/10 分 · ${row.ratingCount || 0} 人评分` + (my ? ` · 你给了 ${my} 星` : "");
 }
 
 export function cRate(row: any, score: number): void {
@@ -833,7 +841,7 @@ export function cRate(row: any, score: number): void {
   LLM.communityRate(row.id, score, prev).then(r => {
     Store.setRating(row.id, score);
     const info = (document.getElementById("cm-rate-info") as HTMLElement);
-    if (info) info.textContent = `当前均分 ${r.avgRating} 星 · ${r.ratingCount || 0} 人评分 · 你给了 ${score} 星`;
+    if (info) info.textContent = `当前均分 ${r.avgRating}/10 分 · ${r.ratingCount || 0} 人评分 · 你给了 ${score} 星`;
     highlightStarsC(row.id);
     const m = (document.getElementById("cm-msg") as HTMLElement);
     if (m) { m.textContent = "已评分 " + score + " 星 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); }

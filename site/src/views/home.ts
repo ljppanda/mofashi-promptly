@@ -296,7 +296,7 @@ export async function loadHotStrip(): Promise<void> {
         const tpl = TEMPLATES.find(t => t.slug === r.id);
         const tryBtn = tpl ? `<button class="btn btn-primary btn-sm hot-try" data-id="${esc(r.id)}" style="margin-top:8px;">🚀 试跑</button>` : "";
         return `<a href="#/t/${encodeURIComponent(r.id)}" class="card tpl-card hot" data-id="${esc(r.id)}">
-          <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}</span></div>
+          <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}/5</span></div>
           <h3>${esc(r.title)}</h3>
           ${tryBtn}
         </a>`;

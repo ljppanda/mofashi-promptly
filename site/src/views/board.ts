@@ -37,7 +37,7 @@ export async function renderBoard(sort: string): Promise<void> {
         <td>${esc(r.industry)}</td>
         <td>${r.uses}</td>
         <td>${r.favorites}</td>
-        <td>${r.avgRating ? r.avgRating.toFixed(1) : "—"}<span class="muted"> (${r.ratingCount})</span></td>
+        <td>${r.avgRating ? r.avgRating.toFixed(1) : "—"}<span class="muted">/5 (${r.ratingCount})</span></td>
         <td><b>${Math.round(r.heat)}</b></td>
       </tr>`).join("")}</tbody>
     </table>`;
