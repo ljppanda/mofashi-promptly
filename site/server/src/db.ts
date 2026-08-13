@@ -320,6 +320,24 @@ export function publishCommunity(rec: { id: string; title: string; industry: str
 
 // 社区冷启动种子（官方精选模板）。当 community 表无「已公开」记录时注入，
 // 让社区首页 / 热度榜 / sitemap 有真实可展示内容；已有内容则不重复注入（幂等）。
+// 生成行业封面（内联 SVG data URI，无外链、防 XSS、视觉差异化）。列表不再千篇一律占位图。
+function coverDataUri(industry: string, title: string): string {
+  const palette: Record<string, [string, string]> = {
+    "写作创作": ["#ff6b9d", "#ffb86b"],
+    "编程开发": ["#4f8cff", "#36d1c4"],
+    "职场办公": ["#6a5cff", "#9b6bff"],
+    "教育培训": ["#ff9a3c", "#ffd56b"],
+    "电商运营": ["#ff5e62", "#ff9966"],
+    "金融": ["#2bb673", "#36c5b0"],
+    "医疗健康": ["#36c5f0", "#5b86e5"],
+    "法律": ["#8e54e9", "#4776e6"],
+  };
+  const [c1, c2] = palette[industry] || ["#7a7a7a", "#b0b0b0"];
+  const esc = (s: string) => s.replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" } as Record<string, string>)[c] || c);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='600' height='320'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='${c1}'/><stop offset='1' stop-color='${c2}'/></linearGradient></defs><rect width='600' height='320' fill='url(#g)'/><text x='40' y='170' font-family='sans-serif' font-size='40' font-weight='700' fill='rgba(255,255,255,0.96)'>${esc(industry)}</text><text x='40' y='232' font-family='sans-serif' font-size='22' fill='rgba(255,255,255,0.88)'>${esc(title)}</text></svg>`;
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+
 type SeedTpl = { id: string; title: string; industry: string; prompt: string; tags: string[]; note: string; uses: number; favorites: number; ratingSum: number; ratingCount: number };
 const COMMUNITY_SEED: SeedTpl[] = [
   { id: "seed-xhs-note", industry: "写作创作", title: "爆款小红书种草笔记生成器", tags: ["小红书", "种草", "营销文案"], note: "输入产品与卖点，生成带钩子标题+正文+话题标签的小红书笔记。", uses: 320, favorites: 88, ratingSum: 270, ratingCount: 32, prompt: "# 角色与背景\n你是资深小红书操盘手，深谙平台算法与年轻用户心理，擅长把产品卖点翻译成有网感、可信任的真实分享。\n# 目标\n为产品 {{product}}（核心卖点：{{selling_point}}；目标人群：{{audience}}）产出一篇能引发收藏/转发的种草笔记。\n# 核心约束与禁止项\n- 必须：口语化、有真实使用体感、埋入场景痛点。\n- 禁止：硬广腔、夸大虚假功效、堆砌形容词无证据。\n# 工作流\n1. 锁定一个具体使用场景与人群痛点；2. 用悬念/反差设计标题；3. 正文走「痛点共鸣→卖点解决→体验佐证」；4. 收尾引导互动；5. 配 5 个话题标签。\n# 输出规范\n- 结构：① 含 emoji 与悬念的标题 ② 300 字内正文（分段、留白）③ #话题标签行。\n- 语气：真实、松弛、像朋友安利；示例标题：「用了{{product}}两周，我妈以为我偷偷去做了XX」。\n# 边界与兜底\n- 若卖点不足，聚焦单一最强卖点而非泛泛而谈；不编造未提供的功效。\n# 自检\n- 标题有无钩子？正文有无场景与体验？是否像广告而非分享？标签是否精准？" },
@@ -333,8 +351,14 @@ const COMMUNITY_SEED: SeedTpl[] = [
 ];
 export function seedCommunityIfEmpty(): number {
   const row = db.prepare("SELECT COUNT(*) AS c FROM community WHERE status='published'").get() as any;
-  if (row && row.c > 0) return 0;
   const now = Date.now();
+  if (row && row.c > 0) {
+    // 已存在：补足封面（历史种子封面为空串，导致列表视觉同质化）。仅对 cover 为空者更新，避免覆盖用户后来设置的真实封面。
+    const up = db.prepare("UPDATE community SET cover = ? WHERE id = ? AND (cover IS NULL OR cover = '')");
+    let m = 0;
+    for (const s of COMMUNITY_SEED) { up.run(coverDataUri(s.industry, s.title), s.id); m++; }
+    return m;
+  }
   const stmt = db.prepare(
     `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
      VALUES(?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
@@ -342,7 +366,7 @@ export function seedCommunityIfEmpty(): number {
   let n = 0;
   for (const s of COMMUNITY_SEED) {
     const ts = now - n * 3600_000; // 每小时一篇，拉开发布时间，使「最新」排序有梯度
-    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, "", ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
+    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, coverDataUri(s.industry, s.title), ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
     n++;
   }
   return n;

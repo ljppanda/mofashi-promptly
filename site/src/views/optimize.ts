@@ -144,8 +144,15 @@ export function openOptimizeModal(t: any): void {
     }
   });
 
+  const DIM_LABELS: Record<string, string> = { relevance: "相关性", structure: "结构", usable: "可用", specific: "具体", safety: "安全", jsonValid: "JSON" };
   function dimHtml(d: any): string {
-    return `相关性 ${d.relevance.toFixed(1)} · 结构 ${d.structure.toFixed(1)} · 可用 ${d.usable.toFixed(1)} · 具体 ${d.specific.toFixed(1)}`;
+    return Object.keys(DIM_LABELS).filter((k) => d && typeof d[k] === "number").map((k) => `${DIM_LABELS[k]} ${d[k].toFixed(1)}`).join(" · ");
+  }
+  function metricsHtml(agg: any): string {
+    const parts: string[] = [];
+    if (agg && typeof agg.avgTokens === "number") parts.push(`~${Math.round(agg.avgTokens)} tok`);
+    if (agg && typeof agg.avgLatencyMs === "number") parts.push(`~${Math.round(agg.avgLatencyMs)} ms`);
+    return parts.length ? `<div class="muted" style="font-size:.76rem;margin-top:2px;">⚙ 单样本均值 ${parts.join(" · ")}</div>` : "";
   }
 
   async function run(): Promise<void> {
@@ -181,7 +188,7 @@ export function openOptimizeModal(t: any): void {
         (idx, total, _stage, label) => { setStage(`📝 评测原版 · 第 ${idx}/${total} 个样本 — ${label}…`); },
         controller.signal);
       const agg = await aggregate(orig);
-      let html = `<div class="card" style="padding:12px;"><b>原版：均分 ${agg.avgTotal.toFixed(1)}/20</b>（${agg.count} 有效）<div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div></div>`;
+      let html = `<div class="card" style="padding:12px;"><b>原版：均分 ${agg.avgTotal.toFixed(1)}/20</b>（${agg.count} 有效）<div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div>${metricsHtml(agg)}</div>`;
       if (agg.avgTotal >= threshold) {
         resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">✓ 已达到阈值（${threshold}），质量达标，建议保留原版。如需进一步打磨可手动微调。</p>`;
         resEl.style.display = "";
@@ -209,7 +216,7 @@ export function openOptimizeModal(t: any): void {
         controller.signal);
       const optAgg = await aggregate(optRes);
       const delta = optAgg.avgTotal - agg.avgTotal;
-      html += `<div class="card mt-2" style="padding:12px;border-color:var(--brand);"><b>优化版：均分 ${optAgg.avgTotal.toFixed(1)}/20</b> <span class="pill pill-amber">${delta >= 0 ? "▲ +" : "▼ "}${delta.toFixed(1)}</span><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(optAgg.dims)}</div></div>`;
+      html += `<div class="card mt-2" style="padding:12px;border-color:var(--brand);"><b>优化版：均分 ${optAgg.avgTotal.toFixed(1)}/20</b> <span class="pill pill-amber">${delta >= 0 ? "▲ +" : "▼ "}${delta.toFixed(1)}</span><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(optAgg.dims)}</div>${metricsHtml(optAgg)}</div>`;
       resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">${delta > 0 ? "优化后质量提升，可「采用优化版」。仍可在「历史版本」回滚。" : "优化后分数未提升，建议保留原版或手动调整阈值。"}</p>`;
       resEl.style.display = "";
       diffEl.innerHTML = `<div class="muted" style="font-size:.8rem;margin-bottom:6px;">原版 ↔ 优化版 文本差异</div><div class="code-box" style="white-space:pre-wrap;max-height:300px;overflow:auto;">${diffLines(t.prompt, newPrompt)}</div>`;
