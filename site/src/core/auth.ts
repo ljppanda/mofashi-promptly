@@ -28,8 +28,8 @@ function openLoginModal(): Promise<string | null> {
         <input id="auth-pass" type="password" class="input" style="margin-top:8px;" placeholder="密码 / 管理员口令" autocomplete="current-password" />
         <div id="auth-msg" class="muted" style="font-size:.78rem;margin-top:8px;color:#dc2626;"></div>
         <div class="flex gap-2 mt-1 flex-wrap items-center" style="font-size:.76rem;">
-          <a id="auth-forgot" href="javascript:;" style="color:#64748b;">忘记密码？</a>
-          <span class="muted" style="margin-left:auto;color:#94a3b8;">密码经 scrypt 加盐哈希存储、不可逆</span>
+          <a id="auth-forgot" href="javascript:;" style="color:var(--slate);">忘记密码？</a>
+          <span class="muted" style="margin-left:auto;color:var(--muted);">密码经 scrypt 加盐哈希存储、不可逆</span>
         </div>
         <div class="flex gap-2 mt-4 flex-wrap items-center">
           <button id="auth-ok" class="btn btn-primary btn-sm">登录</button>
@@ -182,7 +182,7 @@ export function openForgotModal(): Promise<string | null> {
     const submit = async () => {
       const email = (emailEl && emailEl.value || "").trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { msg.textContent = "请输入有效邮箱"; return; }
-      ok.disabled = true; ok.style.opacity = ".6"; msg.textContent = "发送中…"; msg.style.color = "#64748b";
+      ok.disabled = true; ok.style.opacity = ".6"; msg.textContent = "发送中…"; msg.style.color = "var(--slate)";
       try {
         const r = await LLM.authForgotPassword(email);
         msg.style.color = "#16a34a";

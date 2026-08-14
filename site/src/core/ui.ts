@@ -130,7 +130,7 @@ export function diffLines(a: string, b: string): string {
   const out: string[] = [];
   let i = 0, j = 0;
   while (i < n && j < m) {
-    if (A[i] === B[j]) { out.push(`<span style="display:block;white-space:pre-wrap;color:#475569;">  ${esc(A[i])}</span>`); i++; j++; }
+    if (A[i] === B[j]) { out.push(`<span style="display:block;white-space:pre-wrap;color:var(--slate);">  ${esc(A[i])}</span>`); i++; j++; }
     else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push(`<span style="display:block;white-space:pre-wrap;color:#b91c1c;">- ${esc(A[i])}</span>`); i++; }
     else { out.push(`<span style="display:block;white-space:pre-wrap;color:#15803d;">+ ${esc(B[j])}</span>`); j++; }
   }

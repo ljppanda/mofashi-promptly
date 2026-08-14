@@ -59,7 +59,7 @@ export async function traces(): Promise<void> {
       const tok = traces.reduce((s: number, t: any) => s + (t.totalTokens || 0), 0);
       const sum = (document.getElementById("tr-summary") as HTMLElement);
       if (sum) sum.innerHTML = [["总调用", total], ["错误", errs], ["平均延迟", (avgLat / 1000).toFixed(1) + "s"], ["累计 Token", tok]]
-        .map((kv) => `<div class="pill" style="background:#f1f5f9;color:var(--slate);">${kv[0]}：<b>${kv[1]}</b></div>`).join("");
+        .map((kv) => `<div class="pill" style="background:#f0e8d8;color:var(--slate);">${kv[0]}：<b>${kv[1]}</b></div>`).join("");
       if (!traces.length) { wrap.innerHTML = '<p class="muted">还没有任何调用记录。去生成或测试一条提示词，这里就会出现 trace。</p>'; return; }
       wrap.innerHTML = traces.map(trCard).join("");
       wrap.querySelectorAll(".tr-expand").forEach(b => b.addEventListener("click", () => {

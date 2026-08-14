@@ -29,8 +29,8 @@ export function settings(): void {
           <span id="pw-msg" class="text-xs"></span>
         </div>
       </div>
-      <p id="change-pw-admin" class="text-xs muted mt-3" style="${LLM.authIsAuthed() && LLM.isAdmin() ? "" : "display:none;"}">管理员口令由服务端 <code style="background:#f1f5f9;padding:1px 5px;border-radius:5px;">APP_ADMIN_PASSPHRASE</code> 配置，无法在界面内修改。</p>
-      <p class="text-xs muted mt-2">普通用户开放注册；管理员用服务端 <code style="background:#f1f5f9;padding:1px 5px;border-radius:5px;">.env</code> 的 APP_ADMIN_PASSPHRASE 口令登录（口令匹配也视为管理员）。账号仅用于社区身份与权限，模型 Key 仍保存在本机浏览器。</p>
+      <p id="change-pw-admin" class="text-xs muted mt-3" style="${LLM.authIsAuthed() && LLM.isAdmin() ? "" : "display:none;"}">管理员口令由服务端 <code style="background:#f0e8d8;padding:1px 5px;border-radius:5px;">APP_ADMIN_PASSPHRASE</code> 配置，无法在界面内修改。</p>
+      <p class="text-xs muted mt-2">普通用户开放注册；管理员用服务端 <code style="background:#f0e8d8;padding:1px 5px;border-radius:5px;">.env</code> 的 APP_ADMIN_PASSPHRASE 口令登录（口令匹配也视为管理员）。账号仅用于社区身份与权限，模型 Key 仍保存在本机浏览器。</p>
     </div>
     <div class="card card-pad" style="max-width:560px;margin-top:16px;">
       <label class="block text-sm font-medium mb-1" style="color:var(--slate)">模型服务商</label>
@@ -59,7 +59,7 @@ export function settings(): void {
         <span class="text-sm font-medium" style="color:var(--slate)">通过代理服务器调用（避免跨域 / 隐藏 Key）</span>
       </label>
       <input id="set-proxy-base" class="input" style="margin-bottom:4px;" placeholder="代理地址，如 http://localhost:8000" value="${esc(s.proxyBase || "")}">
-      <p class="text-xs muted mb-4">开启后，所有 LLM 请求改走该代理的 <code style="background:#f1f5f9;padding:1px 5px;border-radius:5px;">/relay</code> 端点。同源代理可彻底避开浏览器跨域；Key 由代理转发，不暴露给前端直连。</p>
+      <p class="text-xs muted mb-4">开启后，所有 LLM 请求改走该代理的 <code style="background:#f0e8d8;padding:1px 5px;border-radius:5px;">/relay</code> 端点。同源代理可彻底避开浏览器跨域；Key 由代理转发，不暴露给前端直连。</p>
 
       <button id="set-save" class="btn btn-primary">保存</button>
       <span id="set-msg" class="text-xs" style="color:#16a34a;margin-left:12px;"></span>
@@ -145,7 +145,7 @@ export function settings(): void {
     if (!current || !next) { msg.textContent = "请填写当前密码与新密码"; msg.style.color = "#dc2626"; return; }
     if (next !== next2) { msg.textContent = "两次新密码不一致"; msg.style.color = "#dc2626"; return; }
     if (next.length < 8) { msg.textContent = "新密码至少 8 位"; msg.style.color = "#dc2626"; return; }
-    pwSave.disabled = true; pwSave.style.opacity = ".6"; msg.textContent = "保存中…"; msg.style.color = "#64748b";
+    pwSave.disabled = true; pwSave.style.opacity = ".6"; msg.textContent = "保存中…"; msg.style.color = "var(--slate)";
     try {
       await LLM.authChangePassword(current, next);
       msg.textContent = "✓ 密码已更新"; msg.style.color = "#16a34a";
@@ -212,7 +212,7 @@ function populateModels(p: string, liveModels?: string[] | null): void {
   else sel.value = prov.default;
   const wrap = (document.getElementById("secret-wrap") as HTMLElement);
   if (prov.needSecret) wrap.style.display = "block"; else wrap.style.display = "none";
-  const note = prov.note ? `<p class="text-xs text-slate-400 mt-1">${esc(prov.note)}</p>` : "";
+  const note = prov.note ? `<p class="text-xs muted mt-1">${esc(prov.note)}</p>` : "";
   wrap.insertAdjacentHTML("afterend", note);
 }
 

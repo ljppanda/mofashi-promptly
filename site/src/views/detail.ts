@@ -36,7 +36,7 @@ export function detail(slug: string): void {
   const isMine = Store.hasMine(slug);
   const canEdit = isMine || ctx.current.generated || ctx.current.imported || ctx.current.forkedFrom;
   setMeta(tpl.title, (tpl.summary || tpl.task || "").slice(0, 120));
-  const tagHtml = (tpl.tags || []).map(t => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
+  const tagHtml = (tpl.tags || []).map(t => `<span class="text-xs tag mr-1">#${esc(t)}</span>`).join("");
   const industryOpts = ALL_INDUSTRIES.map(i =>
     `<option value="${esc(i)}" ${i === tpl.industry ? "selected" : ""}>${esc(i)}</option>`
   ).join("");
@@ -55,8 +55,8 @@ export function detail(slug: string): void {
       <h1 class="section-title" style="font-size:1.7rem;">${esc(tpl.title)}</h1>
       <div class="muted" style="font-size:.85rem;margin-top:6px;"><span id="meta-industry">${esc(tpl.industry)}</span> · ${esc(tpl.task)}
         ${tpl.generated ? '<span class="pill pill-amber" style="margin-left:4px;">AI 生成</span>' : ""}
-        ${tpl.forkedFrom ? `<a href="#/c/${esc(tpl.forkedFrom)}" class="pill" style="margin-left:4px;background:#ede9fe;color:#6d28d9;text-decoration:none;">🍴 派生自社区「${esc(tpl.forkedFromTitle || "社区模板")}」</a>` : ""}</div>
-      ${ctx.current._genUsage ? `<div class="mt-2 inline-flex items-center gap-1 text-xs" style="color:var(--slate);background:#f1f5f9;padding:4px 10px;border-radius:8px;">📊 模板生成：${esc(fmtUsage(ctx.current._genUsage, ctx.current._genElapsed || 0))}</div>` : ""}
+        ${tpl.forkedFrom ? `<a href="#/c/${esc(tpl.forkedFrom)}" class="pill" style="margin-left:4px;background:var(--brand-50);color:var(--brand-700);text-decoration:none;">🍴 派生自社区「${esc(tpl.forkedFromTitle || "社区模板")}」</a>` : ""}</div>
+      ${ctx.current._genUsage ? `<div class="mt-2 inline-flex items-center gap-1 text-xs" style="color:var(--slate);background:var(--bg-soft);padding:4px 10px;border-radius:8px;">📊 模板生成：${esc(fmtUsage(ctx.current._genUsage, ctx.current._genElapsed || 0))}</div>` : ""}
     </div>
     <div class="flex flex-wrap items-center gap-2 mt-3">
       <label class="text-sm font-medium" style="color:var(--slate)">所属分类</label>

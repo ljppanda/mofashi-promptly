@@ -8,7 +8,7 @@ import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { openRefineBox, closeRefineBox, handleRefine, communityRefineCtx } from "./refine.js";
 import { openPreviewModal } from "./preview.js";
-import { loadSummary, renderIndustryDist } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
+import { loadSummary, renderIndustryDist, iconFor } from "./home.js"; // 提案2：社区新鲜度信号（今日新增 N 条）
 import { openOptimizeModal } from "./optimize.js"; // r9：社区卡片「🔧 优化」入口（复用 F13）
 
 // r9：把社区模板派生为「我的模板」（带来源标记），复用 F11 Remix 闭环；详情页与列表卡片共用
@@ -65,17 +65,17 @@ function publishNowWithDupCheck(id: string): Promise<"published" | "cancelled" |
 
 // 行业主题色（封面占位图渐变）：无封面时按行业给出视觉区分，提升列表视觉吸引力
 const INDUSTRY_PH: Record<string, string> = {
-  "写作创作": "linear-gradient(135deg,#f472b6,#db2777)",
-  "编程开发": "linear-gradient(135deg,#60a5fa,#2563eb)",
-  "职场办公": "linear-gradient(135deg,#34d399,#059669)",
-  "教育培训": "linear-gradient(135deg,#fbbf24,#d97706)",
-  "电商运营": "linear-gradient(135deg,#f87171,#dc2626)",
-  "金融": "linear-gradient(135deg,#a78bfa,#7c3aed)",
-  "医疗健康": "linear-gradient(135deg,#22d3ee,#0891b2)",
-  "法律": "linear-gradient(135deg,#94a3b8,#475569)",
+  "写作创作": "linear-gradient(135deg,#d98c7a,#b5564a)",
+  "编程开发": "linear-gradient(135deg,#7fa69a,#3f6b5a)",
+  "职场办公": "linear-gradient(135deg,#c9a36b,#9a7233)",
+  "教育培训": "linear-gradient(135deg,#d8b06a,#b07f2e)",
+  "电商运营": "linear-gradient(135deg,#d98f6f,#b5532f)",
+  "金融": "linear-gradient(135deg,#b5805a,#7a4a2b)",
+  "医疗健康": "linear-gradient(135deg,#7fa6a0,#3f6f68)",
+  "法律": "linear-gradient(135deg,#9a9484,#5a5343)",
 };
-function industryPh(ind: string): string {
-  return INDUSTRY_PH[ind] || "linear-gradient(135deg,#818cf8,#4f46e5)";
+export function industryPh(ind: string): string {
+  return INDUSTRY_PH[ind] || "linear-gradient(135deg,#b5805a,#7a4a2b)";
 }
 
 // ---------- 社区分享（M18） ----------
@@ -240,6 +240,8 @@ export async function community(): Promise<void> {
   `;
   let tab = "square";
   const qEl = (document.getElementById("cm-q") as HTMLInputElement);
+  const _hs = (window as any).__headerSearch;
+  if (_hs) { (window as any).__headerSearch = undefined; qEl.value = _hs; }
   const sortEl = (document.getElementById("cm-sort") as HTMLSelectElement);
   const industryEl = (document.getElementById("cm-industry") as HTMLSelectElement);
   async function load() {
@@ -464,11 +466,15 @@ export async function moderationConsole(reload: () => void | Promise<void>): Pro
 }
 
 export function communityCard(r: any, tab: string): string {
-  const tagHtml = (r.tags || []).map((t: any) => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
+  const tagHtml = (r.tags || []).map((t: any) => `<span class="text-xs tag mr-1">#${esc(t)}</span>`).join("");
   const coverHtml = r.cover
-    ? `<img class="cm-cover" src="${esc(r.cover)}" alt="" loading="lazy" onerror="this.style.display='none'" />`
-    : `<div class="cm-cover cm-cover-ph" style="background:${industryPh(r.industry)}"><span>${esc((r.title || "?").slice(0, 1))}</span></div>`;
+    ? `<div class="tpl-cover" style="padding:0;background:${industryPh(r.industry)}"><img class="tpl-cover-img" src="${esc(r.cover)}" alt="" loading="lazy" onerror="this.style.display='none'" /></div>`
+    : `<div class="tpl-cover" style="background:${industryPh(r.industry)}"><span class="tpl-cover-emoji">${iconFor(r.industry)}</span><span class="tpl-cover-name">${esc(r.industry)}</span></div>`;
   const relTime = fmtRelative(r.publishedAt || r.createdAt);
+  const isOfficial = r.author === "模法师官方";
+  const authorHtml = r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author);
+  const ratingStr = r.avgRating ? r.avgRating.toFixed(1) + (r.ratingCount ? ` (${r.ratingCount})` : "") : "—";
+  const showTags = tab !== "home";
   const actions = tab === "mine"
     ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
          ${r.status === "draft"
@@ -485,24 +491,26 @@ export function communityCard(r: any, tab: string): string {
              <button class="btn btn-ghost btn-sm cm-report" data-id="${esc(r.id)}" data-title="${esc(r.title)}">⚠ 举报</button>
              <span class="muted" style="font-size:.72rem;">已公开</span>
            </div>`
-        : `<div class="flex gap-2 mt-2 flex-wrap items-center">
+        : (tab === "home"
+          ? `<div class="flex gap-2 mt-2">
+               <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
+               <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
+             </div>`
+          : `<div class="flex gap-2 mt-2 flex-wrap items-center">
              <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
+             <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
              <span class="muted" style="font-size:.72rem;">点开看完整卡片</span>
-           </div>`);
-  return `<div class="card tpl-card cm-card" data-id="${esc(r.id)}" style="margin-top:12px;cursor:pointer;overflow:hidden;">
+           </div>`));
+  return `<div class="card tpl-card tpl-card--cover cm-card" data-id="${esc(r.id)}" style="cursor:pointer;overflow:hidden;">
     ${coverHtml}
-    <div class="cm-body">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
-          <span class="pill pill-violet">${esc(r.industry)}</span>
-          ${r.version ? '<span class="pill pill-version">' + esc(r.version) + '</span>' : ''}
-        </div>
-        <span class="text-xs muted">${relTime ? esc(relTime) + " · " : ""}${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) + "/10" : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
+    <div class="tpl-body">
+      <div class="flex items-center justify-between" style="gap:8px;">
+        <span class="pill ${isOfficial ? 'pill-official' : 'pill-community'}">${isOfficial ? '官方' : '社区'}</span>
+        <span class="text-xs muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${authorHtml} · ★ ${ratingStr}${relTime ? ' · ' + esc(relTime) : ''}</span>
       </div>
-      <h3 style="margin-top:6px;">${esc(r.title)}</h3>
-      <div class="mt-1">${tagHtml}</div>
-      <div class="muted" style="font-size:.75rem;margin-top:6px;">🔥 ${r.uses} 次使用 · ⭐ ${r.favorites} 收藏${r.note ? " · " + esc(r.note) : ""}</div>
+      <h3>${esc(r.title)}</h3>
+      ${showTags ? `<div class="mt-1">${tagHtml}</div>` : ""}
+      <div class="cm-stats muted">🔥 ${r.uses} 次使用 · ⭐ ${r.favorites} 收藏${r.note && showTags ? " · " + esc(r.note) : ""}</div>
       ${actions}
     </div>
   </div>`;
@@ -516,7 +524,7 @@ export async function communityDetail(id: string): Promise<void> {
     ctx.appEl().innerHTML = `<a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a><p class="mt-3">加载失败：${esc((e as any).message)}</p>`;
     return;
   }
-  const tagHtml = (row.tags || []).map((t: any) => `<span class="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded mr-1">#${esc(t)}</span>`).join("");
+  const tagHtml = (row.tags || []).map((t: any) => `<span class="text-xs tag mr-1">#${esc(t)}</span>`).join("");
   ctx.appEl().innerHTML = `
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">

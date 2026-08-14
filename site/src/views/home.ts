@@ -5,7 +5,7 @@ import { ctx } from "../core/ctx.js";
 import { esc, setMeta } from "../core/ui.js";
 import { ICON } from "../core/config.js";
 import { handleGenerate } from "./generate.js";
-import { communityCard } from "./community.js";
+import { communityCard, industryPh } from "./community.js";
 import { openPreviewModal } from "./preview.js";
 
 function industries(): string[] {
@@ -47,10 +47,10 @@ export function renderIndustryDist(el: HTMLElement | null, counts: { industry: s
     const pct = max ? Math.round((c.count / max) * 100) : 0;
     return `<a href="#/i/${encodeURIComponent(c.industry)}" style="display:flex;align-items:center;gap:10px;text-decoration:none;margin:7px 0;">
       <span style="width:84px;font-size:.82rem;color:var(--slate);flex:none;">${iconFor(c.industry)} ${esc(c.industry)}</span>
-      <span style="flex:1;height:10px;background:var(--brand-50,#eef2ff);border-radius:6px;overflow:hidden;">
-        <span style="display:block;height:100%;width:${pct}%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:6px;"></span>
+      <span style="flex:1;height:10px;background:var(--brand-50);border-radius:6px;overflow:hidden;">
+        <span style="display:block;height:100%;width:${pct}%;background:linear-gradient(90deg,var(--brand),var(--brand-600));border-radius:6px;"></span>
       </span>
-      <span style="width:34px;text-align:right;font-size:.8rem;color:var(--muted,#64748b);flex:none;">${c.count}</span>
+      <span style="width:34px;text-align:right;font-size:.8rem;color:var(--muted);flex:none;">${c.count}</span>
     </a>`;
   }).join("");
 }
@@ -71,18 +71,24 @@ function fmtNum(n: number): string {
 let pendingIndustry = "";
 export function setPendingIndustry(i: string): void { pendingIndustry = i; }
 
-// 模板卡片（首页 / 行业页复用）
+// 模板卡片（首页 / 行业页复用）：带行业封面 banner
 export function card(t: any): string {
   const badge = t.imported
     ? '<span class="pill pill-green">导入</span>'
     : (t.generated ? '<span class="pill pill-amber">AI 生成</span>' : "");
-  return `<a href="#/t/${encodeURIComponent(t.slug)}" class="card tpl-card">
-    <div class="flex items-center justify-between">
-      <span class="pill pill-violet">${esc(t.industry)}</span>
-      <span class="text-xs muted">${esc(t.task)} ${badge}</span>
+  return `<a href="#/t/${encodeURIComponent(t.slug)}" class="card tpl-card tpl-card--cover">
+    <div class="tpl-cover" style="background:${industryPh(t.industry)}">
+      <span class="tpl-cover-emoji">${iconFor(t.industry)}</span>
+      <span class="tpl-cover-name">${esc(t.industry)}</span>
     </div>
-    <h3>${esc(t.title)}</h3>
-    <p>${esc(t.summary)}</p>
+    <div class="tpl-body">
+      <div class="flex items-center justify-between">
+        <span class="pill pill-violet">${esc(t.industry)}</span>
+        <span class="text-xs muted">${esc(t.task)} ${badge}</span>
+      </div>
+      <h3>${esc(t.title)}</h3>
+      <p>${esc(t.summary)}</p>
+    </div>
   </a>`;
 }
 
@@ -119,10 +125,10 @@ export function home(): void {
       <div><div class="stat-num"><span id="trust-community">—</span> <span class="u">条</span></div><div class="stat-label">社区已发布</div></div>
     </div>
     <div id="trust-line" class="muted" style="font-size:.82rem;margin-top:10px;"></div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:.82rem;color:#475569;">
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:12px;font-size:.82rem;color:var(--slate);">
       <span>🔒 <b>API Key 仅存你本机浏览器</b>，平台不托管额度、不拿你的数据训练</span>
       <span>🧩 <b>19 家主流模型直连</b>，自带 Key 即用</span>
-      <a href="#/models" style="color:#6d28d9;font-weight:600;">查看支持的模型 →</a>
+      <a href="#/models" style="color:var(--brand-700);font-weight:600;">查看支持的模型 →</a>
     </div>
 
     <!-- 3 步上手（报告 r10 #3：降低首访门槛） -->
@@ -205,7 +211,7 @@ export function home(): void {
     <section class="section">
       <h2 class="section-title">他们这样用模法师</h2>
       <p class="section-sub">从创作者到职场人，把重复性脑力活固化成可复用模板。</p>
-      <div class="grid sm:grid-cols-3 gap-3 mt-3">
+      <div class="tpl-grid mt-3">
         ${TESTIMONIALS.map(t => `<div class="card tpl-card">
           <p style="font-size:.9rem;line-height:1.65;color:var(--slate);">"${esc(t.quote)}"</p>
           <div class="flex items-center gap-2 mt-3">
@@ -243,7 +249,7 @@ export function home(): void {
     </div>
 
     <h2 class="section-title" style="margin-top:32px;">全部模板</h2>
-    <div id="list" class="grid sm:grid-cols-2 gap-3" style="margin-top:14px;"></div>
+    <div id="list" class="tpl-grid" style="margin-top:16px;"></div>
   `;
   renderList("");
   loadHotStrip();
@@ -292,13 +298,19 @@ export async function loadHotStrip(): Promise<void> {
     const rows = await (await fetch("/metrics/board?sort=heat&limit=5")).json();
     if (!rows || !rows.length) return;
     el.innerHTML = `<h2 class="section-title" style="margin-top:8px;">🔥 热门模板</h2>
-      <div class="grid sm:grid-cols-2 gap-3 mt-3">${rows.map(r => {
+      <div class="tpl-grid mt-3">${rows.map(r => {
         const tpl = TEMPLATES.find(t => t.slug === r.id);
         const tryBtn = tpl ? `<button class="btn btn-primary btn-sm hot-try" data-id="${esc(r.id)}" style="margin-top:8px;">🚀 试跑</button>` : "";
-        return `<a href="#/t/${encodeURIComponent(r.id)}" class="card tpl-card hot" data-id="${esc(r.id)}">
-          <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}/5</span></div>
-          <h3>${esc(r.title)}</h3>
-          ${tryBtn}
+        return `<a href="#/t/${encodeURIComponent(r.id)}" class="card tpl-card tpl-card--cover hot" data-id="${esc(r.id)}">
+          <div class="tpl-cover" style="background:${industryPh(r.industry)}">
+            <span class="tpl-cover-emoji">${iconFor(r.industry)}</span>
+            <span class="tpl-cover-name">${esc(r.industry)}</span>
+          </div>
+          <div class="tpl-body">
+            <div class="flex items-center justify-between"><span class="pill pill-violet">${esc(r.industry)}</span><span class="text-xs muted">🔥 ${Math.round(r.heat)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) : "—"}/5</span></div>
+            <h3>${esc(r.title)}</h3>
+            ${tryBtn}
+          </div>
         </a>`;
       }).join("")}</div>`;
     el.querySelectorAll(".hot-try").forEach(b => b.addEventListener("click", (e) => {
@@ -320,7 +332,7 @@ export async function loadCommunityStrip(): Promise<void> {
     if (!rows || !rows.length) return;
     el.innerHTML = `<h2 class="section-title" style="margin-top:8px;">🌟 大家都在用</h2>
       <p class="muted" style="font-size:.82rem;margin-top:4px;">社区里最受欢迎的模板，点开即可试跑或派生。</p>
-      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">${rows.map((r: any) => communityCard(r, "rec")).join("")}</div>`;
+      <div class="tpl-grid mt-3">${rows.map((r: any) => communityCard(r, "home")).join("")}</div>`;
     // 卡片点击跳详情（communityCard 在非 mine/square 下只展示，不挂操作按钮）
     el.querySelectorAll(".cm-card").forEach(c => c.addEventListener("click", () => {
       const id = c.getAttribute("data-id");
@@ -350,14 +362,14 @@ export function industry(name: string): void {
     </div>
     <p class="slate" style="margin-top:14px;line-height:1.7;font-size:.92rem;">${esc(intro.blurb)}</p>
     <div class="flex flex-wrap gap-2" style="margin-top:12px;">
-      ${intro.scenes.map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100,#e0e7ff);">${esc(s)}</span>`).join("")}
+      ${intro.scenes.map(s => `<span class="tag" style="background:var(--surface);border:1px solid var(--brand-100);">${esc(s)}</span>`).join("")}
     </div>
     <div class="flex gap-2 mt-3 flex-wrap items-center">
       <button id="ind-gen" class="btn btn-primary btn-sm">⚡ 用 AI 生成自定义${esc(name)}模板</button>
       <a href="#/community" class="btn btn-ghost btn-sm">🏠 社区广场</a>
     </div>
     <h2 class="section-title" style="margin-top:28px;font-size:1.15rem;">${esc(name)} · 精选模板</h2>
-    <div class="grid sm:grid-cols-2 gap-3 mt-3">${list.map(card).join("")}</div>
+    <div class="tpl-grid mt-3">${list.map(card).join("")}</div>
   `;
   const gb = (document.getElementById("ind-gen") as HTMLButtonElement | null);
   if (gb) gb.addEventListener("click", () => { setPendingIndustry(name); location.hash = "#/"; });

@@ -38,14 +38,18 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen">
   <header class="site-header">
-    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+    <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
       <a href="#/" class="brand-mark">
         <span class="brand-logo">✦</span>
         <span>
           模法师 <span class="brand-sub">Promptly</span>
         </span>
       </a>
-      <nav class="flex gap-1 text-sm items-center">
+      <form id="nav-search-form" class="nav-search" onsubmit="return false;">
+        <span style="opacity:.5;font-size:.85rem;">🔍</span>
+        <input id="nav-search" type="text" placeholder="搜索提示词 / 模板…" aria-label="搜索提示词" />
+      </form>
+      <nav class="flex gap-1 text-sm items-center ml-auto">
         <a href="#/board" class="nav-link2">🔥 热度榜</a>
         <a href="#/community" class="nav-link2">🌐 社区</a>
         <a href="#/traces" class="nav-link2">🔍 可观测</a>
@@ -61,5 +65,17 @@
   <footer class="footer-note">模法师 Promptly · 说一句话，AI 帮你生成可复用的高质量提示词模板</footer>
 
   <script type="module" src="/src/app.ts"></script>
+  <script>
+    (function () {
+      var f = document.getElementById('nav-search-form');
+      var i = document.getElementById('nav-search');
+      if (f && i) f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var q = i.value.trim();
+        window.__headerSearch = q;
+        location.hash = '#/community';
+      });
+    })();
+  </script>
 </body>
 </html>

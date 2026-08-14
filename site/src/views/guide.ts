@@ -14,7 +14,7 @@ export function guidePage(): void {
       <p class="section-sub">5 分钟看懂：为什么「带变量的模板」比「一段写死的提示词」更好用，以及一条生产级提示词应该长什么样。</p>
 
       <!-- 一句话差异 -->
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:18px;margin:18px 0;line-height:1.8;">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:14px;padding:18px;margin:18px 0;line-height:1.8;">
         <b>核心理念</b>：本站把提示词拆成两层 —— <b>模板（骨架）</b> 是带 <code>{{占位符}}</code> 的可复用结构，<b>成品</b> 是填完变量、交给模型的指令。
         同一条模板，填不同变量就能服务不同任务；而写死的提示词用完即弃。
       </div>
@@ -40,7 +40,7 @@ export function guidePage(): void {
       <ol style="line-height:1.9;padding-left:22px;margin:14px 0;font-size:.92rem;">
         ${SEVEN.map((s, i) => `<li><b>${esc(s.t)}</b>：<span class="muted">${esc(s.d)}</span></li>`).join("")}
       </ol>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin:10px 0;">
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:14px;margin:10px 0;">
         <div class="muted" style="font-size:.78rem;margin-bottom:8px;">示例：一条生产级模板的骨架（节选）</div>
         <pre class="code-box" style="white-space:pre-wrap;font-size:.78rem;"># 角色
 你是一名资深 {{行业}} 顾问。
@@ -65,15 +65,15 @@ export function guidePage(): void {
       <p class="section-sub" style="text-align:left;">不同厂商的模型「脾气」不同，顺着它们的特性写提示词，才能拿到最稳的效果（思路对标 OpenAI / Claude / Gemini 官方 Prompt Library）：</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:14px 0;">
         ${FAMILY.map((f) => `
-          <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#fff;">
-            <div style="font-size:1.3rem;margin-bottom:6px;">${f.ico} <b style="color:#0f172a;">${esc(f.name)}</b></div>
+          <div style="border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--surface);">
+            <div style="font-size:1.3rem;margin-bottom:6px;">${f.ico} <b style="color:var(--ink);">${esc(f.name)}</b></div>
             <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:.84rem;" class="muted">
               ${f.points.map((p) => `<li>${esc(p)}</li>`).join("")}
             </ul>
           </div>`).join("")}
       </div>
-      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin:10px 0;line-height:1.7;">
-        <div class="muted" style="font-size:.8rem;margin-bottom:8px;">🛡 <b style="color:#0f172a;">生产纪律（来自官方实践，值得抄作业）</b></div>
+      <div style="background:var(--bg-soft);border:1px solid var(--line);border-radius:12px;padding:16px;margin:10px 0;line-height:1.7;">
+        <div class="muted" style="font-size:.8rem;margin-bottom:8px;">🛡 <b style="color:var(--ink);">生产纪律（来自官方实践，值得抄作业）</b></div>
         <ul style="margin:0;padding-left:20px;line-height:1.9;font-size:.9rem;">
           <li><b>锁版本</b>：生产环境固定模型<b>快照 ID</b>（如 <code>gpt-4o-2024-08-06</code>），不裸用 <code>latest</code>，避免悄悄变体导致效果漂移。</li>
           <li><b>建评测套件</b>：沉淀一组固定测试用例（数据集），每次改提示词都跑一遍回归，确保「优化」真优化而非退化 —— 呼应本站 F13 优化闭环可数据集化。</li>
@@ -86,9 +86,9 @@ export function guidePage(): void {
       <h2 class="section-title" style="font-size:1.2rem;margin-top:30px;">④ 三步上手</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:14px 0;">
         ${STEPS.map((s) => `
-          <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;background:#fff;">
+          <div style="border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--surface);">
             <div style="font-size:1.6rem;">${s.ico}</div>
-            <h4 style="margin:8px 0 4px;color:#0f172a;">${esc(s.t)}</h4>
+            <h4 style="margin:8px 0 4px;color:var(--ink);">${esc(s.t)}</h4>
             <p class="muted" style="font-size:.82rem;line-height:1.6;">${esc(s.d)}</p>
           </div>`).join("")}
       </div>

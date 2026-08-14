@@ -20,8 +20,8 @@ export function modelsPage(): void {
 
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 18px;">
         <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:999px;padding:6px 12px;font-size:.85rem;">🔒 <b>隐私优先</b>：Key 永不离开你的设备</span>
-        <span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:999px;padding:6px 12px;font-size:.85rem;">🧩 <b>${keys.length}</b> 家厂商 · 用户自带 Key 即用</span>
-        <span style="background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:999px;padding:6px 12px;font-size:.85rem;">🛡️ 服务端白名单转发（SSRF 防护）</span>
+        <span style="background:var(--brand-50);color:var(--brand-700);border:1px solid var(--brand-100);border-radius:999px;padding:6px 12px;font-size:.85rem;">🧩 <b>${keys.length}</b> 家厂商 · 用户自带 Key 即用</span>
+        <span style="background:#f7efdd;color:#8a6320;border:1px solid #ecd9b0;border-radius:999px;padding:6px 12px;font-size:.85rem;">🛡️ 服务端白名单转发（SSRF 防护）</span>
       </div>
 
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;">
@@ -30,9 +30,9 @@ export function modelsPage(): void {
       </div>
 
       <!-- 合规与数据主权（报告 r10 #7：强化 B 端/团队信任） -->
-      <div style="border:1px solid #e2e8f0;border-radius:14px;padding:16px;background:#f8fafc;margin-bottom:18px;">
+      <div style="border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--bg-soft);margin-bottom:18px;">
         <h2 class="section-title" style="font-size:1.05rem;margin-bottom:10px;">🛡️ 数据不出域 · 合规说明</h2>
-        <ul style="line-height:1.9;padding-left:20px;font-size:.88rem;margin:0;color:#334155;">
+        <ul style="line-height:1.9;padding-left:20px;font-size:.88rem;margin:0;color:var(--slate);">
           <li><b>Key 永不离开你的设备</b>：API Key 只存浏览器 <code>localStorage</code>，服务端收不到、不托管、不落库。</li>
           <li><b>调用直连厂商</b>：你的提示词与内容经服务端<b>白名单转发</b>（仅放行厂商公网域名，拒绝内网/私有地址，防 SSRF），不经任何第三方训练。</li>
           <li><b>自托管友好</b>：整套站点可私有化部署在你自己的服务器，数据完全自主。</li>
@@ -45,7 +45,7 @@ export function modelsPage(): void {
       <div style="margin-bottom:18px;">
         <div class="muted" style="font-size:.82rem;margin-bottom:8px;">已覆盖的场景（模板可按行业筛选）：</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${ALL_INDUSTRIES.map((b) => `<span style="background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:5px 12px;font-size:.8rem;color:#475569;">${esc(b)}</span>`).join("")}
+          ${ALL_INDUSTRIES.map((b) => `<span style="background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:.8rem;color:var(--slate);">${esc(b)}</span>`).join("")}
         </div>
       </div>
 
@@ -69,14 +69,14 @@ export function modelsPage(): void {
 function providerCard(k: string, p: any): string {
   const models: string[] = p.models || [];
   return `
-    <div class="model-card" data-provider="${esc(k)}" style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;background:#fff;">
+    <div class="model-card" data-provider="${esc(k)}" style="border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--surface);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span style="font-weight:700;color:#0f172a;">${esc(p.label)}</span>
+        <span style="font-weight:700;color:var(--ink);">${esc(p.label)}</span>
         ${p.needSecret ? '<span class="pill pill-amber" style="font-size:.7rem;">需 Secret</span>' : ""}
       </div>
       ${p.note ? `<div class="muted" style="font-size:.74rem;margin-top:6px;line-height:1.5;">${esc(p.note)}</div>` : ""}
       <div class="model-list" id="ml-${esc(k)}" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
-        ${models.map((m) => `<code style="background:#f1f5f9;color:#334155;border-radius:6px;padding:2px 7px;font-size:.72rem;">${esc(m)}</code>`).join("")}
+        ${models.map((m) => `<code style="background:#f0e8d8;color:var(--slate);border-radius:6px;padding:2px 7px;font-size:.72rem;">${esc(m)}</code>`).join("")}
       </div>
       <div class="model-foot muted" id="mf-${esc(k)}" style="font-size:.72rem;margin-top:10px;">内置 ${models.length} 个常用模型 · 默认 ${esc(p.default || "—")}</div>
     </div>
