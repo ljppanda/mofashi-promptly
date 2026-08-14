@@ -496,6 +496,7 @@ export function communityCard(r: any, tab: string): string {
         <div class="flex items-center gap-2">
           ${r.author === "模法师官方" ? '<span class="pill pill-official">官方</span>' : '<span class="pill pill-community">社区</span>'}
           <span class="pill pill-violet">${esc(r.industry)}</span>
+          ${r.version ? '<span class="pill pill-version">' + esc(r.version) + '</span>' : ''}
         </div>
         <span class="text-xs muted">${relTime ? esc(relTime) + " · " : ""}${r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author)} · ★ ${r.avgRating ? r.avgRating.toFixed(1) + "/10" : "—"}${r.ratingCount ? " (" + r.ratingCount + ")" : ""}</span>
       </div>
@@ -520,7 +521,7 @@ export async function communityDetail(id: string): Promise<void> {
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.6rem;">${esc(row.title)}</h1>
-      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span> · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}${fmtRelative(row.publishedAt || row.createdAt) ? " · " + esc(fmtRelative(row.publishedAt || row.createdAt)) : ""}</div>
+      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span>${row.version ? ' <span class="pill pill-version">' + esc(row.version) + '</span>' : ''} · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}${fmtRelative(row.publishedAt || row.createdAt) ? " · " + esc(fmtRelative(row.publishedAt || row.createdAt)) : ""}</div>
       ${row.cover ? `<img class="cm-cover" src="${esc(row.cover)}" alt="" style="margin-top:10px;border-radius:10px;max-height:240px;width:100%;object-fit:cover;" onerror="this.style.display='none'" />` : `<div class="cm-cover-ph" style="background:${industryPh(row.industry)};margin-top:10px;"><span>${esc((row.title || "?").slice(0, 1))}</span></div>`}
     </div>
     <div class="mt-2">${tagHtml}</div>

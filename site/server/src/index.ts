@@ -623,9 +623,9 @@ async function handleCommunityAuthor(req: http.IncomingMessage, res: http.Server
   const u = new URL(req.url ?? "/", "http://localhost");
   const authorId = u.searchParams.get("authorId");
   if (!authorId) return sendJSON(res, 400, { error: "缺少 authorId" });
-  const rows = listCommunityByAuthor(authorId);
-  const authorName = rows.length ? rows[0].author : (getUserById(authorId)?.username || authorId);
-  sendJSON(res, 200, { authorId, author: authorName, items: rows });
+  const { author, items, totals } = listCommunityByAuthor(authorId);
+  const authorName = author || (getUserById(authorId)?.username || authorId);
+  sendJSON(res, 200, { authorId, author: authorName, items, totals });
 }
 // ---- 合集/专辑（C4，报告 #2）----
 async function handleCollectionsList(req: http.IncomingMessage, res: http.ServerResponse) {

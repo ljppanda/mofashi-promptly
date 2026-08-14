@@ -172,6 +172,16 @@ export const MIGRATIONS: Migration[] = [
       try { db.exec("ALTER TABLE community ADD COLUMN cover TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
     },
   },
+  {
+    version: 7,
+    name: "community_version_2026_08_14",
+    up: (db) => {
+      // 社区模板版本徽标（报告 #7，对标 ProBazaar v3.0）：记录模板版本号，传递"持续更新"信号。
+      // 幂等 ALTER：列已存在则忽略。全量回填 v1.0（种子与既有发布统一首发版本）。
+      try { db.exec("ALTER TABLE community ADD COLUMN version TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
+      db.prepare("UPDATE community SET version='v1.0' WHERE version IS NULL OR version=''").run();
+    },
+  },
 ];
 
 // 应用所有「未应用」的迁移。返回实际执行了的迁移名（便于启动日志）。

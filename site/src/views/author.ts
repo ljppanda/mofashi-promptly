@@ -13,12 +13,19 @@ export async function authorPage(authorId: string): Promise<void> {
     return;
   }
   const items = data.items || [];
+  const totals = data.totals || { uses: 0, favorites: 0, joinedAt: null };
+  const joined = totals.joinedAt ? new Date(totals.joinedAt).toISOString().slice(0, 10) : null;
   setMeta("👤 " + data.author + " · 模法师 Promptly", (data.author || "作者") + " 发布了 " + items.length + " 个提示词模板");
   ctx.appEl().innerHTML = `
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.5rem;">👤 ${esc(data.author)}</h1>
-      <div class="muted" style="font-size:.85rem;margin-top:6px;">${items.length} 个已公开模板</div>
+      <div class="muted" style="font-size:.85rem;margin-top:6px;">${items.length} 个已公开模板${joined ? " · 入驻于 " + esc(joined) : ""}</div>
+      <div class="flex gap-3 mt-3" style="flex-wrap:wrap;">
+        <div class="stat-chip"><div class="stat-num">${totals.uses}</div><div class="stat-label">总使用</div></div>
+        <div class="stat-chip"><div class="stat-num">${totals.favorites}</div><div class="stat-label">总收藏</div></div>
+        <div class="stat-chip"><div class="stat-num">${items.length}</div><div class="stat-label">模板数</div></div>
+      </div>
     </div>
     <div id="author-wrap" class="mt-4">${items.length ? items.map(r => communityCard(r, "square")).join("") : '<p class="muted">该作者还没有公开的模板。</p>'}</div>
   `;

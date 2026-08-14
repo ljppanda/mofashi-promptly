@@ -271,6 +271,7 @@ export interface CommunityRow {
   tags: string[];
   note: string;
   cover: string | null;   // 封面图链接 / data URL（轻量版封面方案；空=无封面，前端显示行业占位图）
+  version: string | null; // 模板版本徽标（报告 #7，对标 ProBazaar v3.0）；空=未设
   status: string;
   createdAt: number;
   publishedAt: number | null;
@@ -287,7 +288,7 @@ function communityFromRow(r: any): CommunityRow {
   try { tags = JSON.parse(r.tags || "[]"); } catch { tags = []; }
   return {
     id: r.id, title: r.title, industry: r.industry, author: r.author, authorId: r.author_id ?? null,
-    prompt: r.prompt, tags, note: r.note, cover: r.cover ?? null, status: r.status,
+    prompt: r.prompt, tags, note: r.note, cover: r.cover ?? null, version: r.version ?? null, status: r.status,
     createdAt: r.created_at, publishedAt: r.published_at,
     uses: r.uses, favorites: r.favorites,
     ratingSum: r.rating_sum, ratingCount: r.rating_count,
@@ -295,7 +296,7 @@ function communityFromRow(r: any): CommunityRow {
   };
 }
 
-export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string; cover?: string }): CommunityRow {
+export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string; cover?: string; version?: string }): CommunityRow {
   const now = Date.now();
   const normPrompt = (rec.prompt || "").trim();
   // 幂等去重（用户体验修复）：同一作者 + 相同标题 + 相同正文，视为重复发布，
@@ -311,10 +312,11 @@ export function publishCommunity(rec: { id: string; title: string; industry: str
     }
   }
   // 作者名以服务端鉴权身份为准（authorId 绑定），杜绝客户端伪造"李鬼"。
+  const version = rec.version || "v1.0"; // 首次发布即 v1.0（报告 #7 版本徽标）
   db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,?,'draft',?,NULL,0,0,0,0)`,
-  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", now);
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,?, 'draft',?,NULL,0,0,0,0)`,
+  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", version, now);
   return getCommunity(rec.id)!;
 }
 
@@ -357,16 +359,19 @@ export function seedCommunityIfEmpty(): number {
     const up = db.prepare("UPDATE community SET cover = ? WHERE id = ? AND (cover IS NULL OR cover = '')");
     let m = 0;
     for (const s of COMMUNITY_SEED) { up.run(coverDataUri(s.industry, s.title), s.id); m++; }
+    // 回填版本徽标（报告 #7）：仅对 version 为空者，避免覆盖用户/官方后来设置的版本号。
+    const upv = db.prepare("UPDATE community SET version='v1.0' WHERE id = ? AND (version IS NULL OR version='')");
+    for (const s of COMMUNITY_SEED) { upv.run(s.id); }
     return m;
   }
   const stmt = db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
   );
   let n = 0;
   for (const s of COMMUNITY_SEED) {
     const ts = now - n * 3600_000; // 每小时一篇，拉开发布时间，使「最新」排序有梯度
-    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, coverDataUri(s.industry, s.title), ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
+    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, coverDataUri(s.industry, s.title), "v1.0", ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
     n++;
   }
   return n;
@@ -508,10 +513,20 @@ export function deleteComment(id: string, actorId: string | null, isAdmin: boole
 }
 // 作者主页（C2）：列出某作者已公开模板（按 author_id 过滤，仅 published）。
 // 匿名发布（author_id 为 null）无主页，前端对 authorId 为空不生成链接。
-export function listCommunityByAuthor(authorId: string): CommunityRow[] {
-  if (!authorId) return [];
+export function listCommunityByAuthor(authorId: string): { author: string; items: CommunityRow[]; totals: { uses: number; favorites: number; joinedAt: number | null } } {
+  if (!authorId) return { author: "", items: [], totals: { uses: 0, favorites: 0, joinedAt: null } };
   const rows = db.prepare("SELECT * FROM community WHERE author_id = ? AND status = 'published' ORDER BY COALESCE(published_at, created_at) DESC").all(authorId) as any[];
-  return rows.map(communityFromRow);
+  const items = rows.map(communityFromRow);
+  let uses = 0, favorites = 0;
+  let joinedAt: number | null = null;
+  for (const r of rows) {
+    uses += r.uses || 0;
+    favorites += r.favorites || 0;
+    const t = r.published_at || r.created_at;
+    if (typeof t === "number" && (joinedAt === null || t < joinedAt)) joinedAt = t;
+  }
+  const author = items.length ? items[0].author : "";
+  return { author, items, totals: { uses, favorites, joinedAt } };
 }
 
 // =====================================================================
