@@ -182,6 +182,16 @@ export const MIGRATIONS: Migration[] = [
       db.prepare("UPDATE community SET version='v1.0' WHERE version IS NULL OR version=''").run();
     },
   },
+  {
+    version: 8,
+    name: "community_difficulty_2026_08_17",
+    up: (db) => {
+      // F35-③ 模板难度 / 适配层级元数据：difficulty(入门/进阶/专家) + recommend_model(推荐模型)。
+      // 幂等 ALTER：列已存在则忽略。历史数据不设默认（NULL），由 communityFromRow 兜底为「入门」。
+      try { db.exec("ALTER TABLE community ADD COLUMN difficulty TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
+      try { db.exec("ALTER TABLE community ADD COLUMN recommend_model TEXT"); } catch { /* 列已存在则忽略（幂等） */ }
+    },
+  },
 ];
 
 // 应用所有「未应用」的迁移。返回实际执行了的迁移名（便于启动日志）。

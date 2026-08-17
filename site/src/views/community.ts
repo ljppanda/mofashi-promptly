@@ -340,6 +340,13 @@ export async function community(): Promise<void> {
         const r = (rows || []).find((x: any) => x.id === id);
         if (r) openOptimizeModal({ ...r, slug: r.slug || ("opt-" + r.id) });
       }));
+      // F35-② 列表卡片「📤 分享」：打开外部 AI 平台预填弹层（纯前端）
+      wrap.querySelectorAll(".cm-share").forEach(b => b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = b.getAttribute("data-id");
+        const r = (rows || []).find((x: any) => x.id === id);
+        if (r) openShareMenu(r);
+      }));
     } catch (e) {
       const msg = (e as any) && (e as any).message ? (e as any).message : String(e);
       // 未登录查看「我的发布」：友好引导登录，而非生硬地报 401
@@ -489,16 +496,19 @@ export function communityCard(r: any, tab: string): string {
              <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
              <button class="btn btn-ghost btn-sm cm-opt" data-id="${esc(r.id)}">🔧 优化</button>
              <button class="btn btn-ghost btn-sm cm-report" data-id="${esc(r.id)}" data-title="${esc(r.title)}">⚠ 举报</button>
+             <button class="btn btn-ghost btn-sm cm-share" data-id="${esc(r.id)}">📤 分享</button>
              <span class="muted" style="font-size:.72rem;">已公开</span>
            </div>`
         : (tab === "home"
           ? `<div class="flex gap-2 mt-2">
                <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
                <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
+               <button class="btn btn-ghost btn-sm cm-share" data-id="${esc(r.id)}">📤 分享</button>
              </div>`
           : `<div class="flex gap-2 mt-2 flex-wrap items-center">
              <button class="btn btn-primary btn-sm cm-try" data-id="${esc(r.id)}">🚀 试跑</button>
              <button class="btn btn-ghost btn-sm cm-fork" data-id="${esc(r.id)}">🍴 派生</button>
+             <button class="btn btn-ghost btn-sm cm-share" data-id="${esc(r.id)}">📤 分享</button>
              <span class="muted" style="font-size:.72rem;">点开看完整卡片</span>
            </div>`));
   return `<div class="card tpl-card tpl-card--cover cm-card" data-id="${esc(r.id)}" style="cursor:pointer;overflow:hidden;">
@@ -506,6 +516,7 @@ export function communityCard(r: any, tab: string): string {
     <div class="tpl-body">
       <div class="flex items-center justify-between" style="gap:8px;">
         <span class="pill ${isOfficial ? 'pill-official' : 'pill-community'}">${isOfficial ? '官方' : '社区'}</span>
+        <span class="pill pill-diff diff-${r.difficulty === '专家' ? 3 : r.difficulty === '进阶' ? 2 : 1}">${esc(r.difficulty || '入门')}</span>
         <span class="text-xs muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${authorHtml} · ★ ${ratingStr}${relTime ? ' · ' + esc(relTime) : ''}</span>
       </div>
       <h3>${esc(r.title)}</h3>
@@ -514,6 +525,99 @@ export function communityCard(r: any, tab: string): string {
       ${actions}
     </div>
   </div>`;
+}
+
+// ---------- F35-② 分享到外部 AI 平台（纯前端，零服务端） ----------
+// 把提示词预填进各平台新对话 URL；过长则降级为「复制原文 + 打开首页」，避免 URL 被截断。
+type SharePlatform = { key: string; name: string; icon: string; preset: boolean };
+const SHARE_PLATFORMS: SharePlatform[] = [
+  { key: "chatgpt", name: "ChatGPT", icon: "🟢", preset: true },
+  { key: "claude", name: "Claude", icon: "🟣", preset: true },
+  { key: "gemini", name: "Gemini", icon: "🔷", preset: true },
+  { key: "perplexity", name: "Perplexity", icon: "🟠", preset: true },
+  { key: "doubao", name: "豆包", icon: "🔵", preset: true },
+  { key: "kimi", name: "Kimi", icon: "🟡", preset: false },
+  { key: "yuanbao", name: "元宝", icon: "🟦", preset: false },
+  { key: "copilot", name: "Copilot", icon: "🪟", preset: true },
+];
+const SHARE_URL_MAX = 1800; // 预填参数编码后安全上限（字节），超出则降级
+
+function buildShareUrl(key: string, encText: string, longText: boolean): string {
+  if (longText) {
+    const home: Record<string, string> = {
+      chatgpt: "https://chatgpt.com/", claude: "https://claude.ai/new", gemini: "https://gemini.google.com/app",
+      perplexity: "https://www.perplexity.ai/", doubao: "https://www.doubao.com/chat", kimi: "https://kimi.moonshot.cn/",
+      yuanbao: "https://yuanbao.tencent.com/", copilot: "https://copilot.microsoft.com/",
+    };
+    return home[key] || "https://chatgpt.com/";
+  }
+  const q = `?q=${encText}`;
+  switch (key) {
+    case "chatgpt": return `https://chatgpt.com/?prompt=${encText}`;
+    case "claude": return `https://claude.ai/new${q}`;
+    case "gemini": return `https://gemini.google.com/app${q}`;
+    case "perplexity": return `https://www.perplexity.ai/${q}`;
+    case "doubao": return `https://www.doubao.com/chat${q}`;
+    case "copilot": return `https://copilot.microsoft.com/${q}`;
+    case "kimi": return "https://kimi.moonshot.cn/";
+    case "yuanbao": return "https://yuanbao.tencent.com/";
+    default: return "https://chatgpt.com/";
+  }
+}
+
+export function openShareMenu(r: any): void {
+  const title = r?.title || "提示词";
+  const text = r?.prompt || "";
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.innerHTML = `
+    <div class="modal-card card share-card">
+      <div class="ttl">📤 把「${esc(title)}」送到 AI 平台</div>
+      <div class="muted" style="font-size:.78rem;margin-top:4px;">点下面的平台，会打开一个已预填提示词的新对话（长提示词自动改为「复制原文 + 打开首页」，粘贴即用）。</div>
+      <div class="share-grid">
+        ${SHARE_PLATFORMS.map(p => `<button class="share-item" data-key="${p.key}"><span class="share-ico">${p.icon}</span><span>${esc(p.name)}</span>${p.preset ? "" : '<span class="share-tag">首页</span>'}</button>`).join("")}
+      </div>
+      <div class="flex gap-2 mt-3 items-center">
+        <button id="share-copy" class="btn btn-primary btn-sm">📋 复制提示词原文</button>
+        <button id="share-cancel" class="btn btn-ghost btn-sm">关闭</button>
+      </div>
+      <div id="share-msg" class="muted" style="font-size:.75rem;margin-top:6px;"></div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => {
+    window.removeEventListener("hashchange", onHash);
+    ov.remove();
+  };
+  const onHash = () => close();
+  window.addEventListener("hashchange", onHash, { once: true });
+  const msg = () => ov.querySelector("#share-msg") as HTMLElement;
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  (ov.querySelector("#share-cancel") as HTMLElement)?.addEventListener("click", close);
+  (ov.querySelector("#share-copy") as HTMLElement)?.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(text); msg().textContent = "✓ 已复制到剪贴板"; }
+    catch { msg().textContent = "复制失败，请手动选择正文复制"; }
+  });
+  ov.querySelectorAll(".share-item").forEach(b => b.addEventListener("click", () => {
+    const key = b.getAttribute("data-key") || "chatgpt";
+    const plat = SHARE_PLATFORMS.find(p => p.key === key);
+    const name = plat?.name || key;
+    const enc = encodeURIComponent(text);
+    const longText = enc.length > SHARE_URL_MAX;
+    const url = buildShareUrl(key, enc, longText);
+    const preset = !!plat?.preset;
+    // 预填场景：平台支持 URL 预填且文本不超长 → 直接打开已填好提示词的新对话
+    // 粘贴场景：非预填平台（Kimi/元宝）或文本过长 → 一定复制原文，并用长 toast 明确提示 Ctrl+V
+    window.open(url, "_blank", "noopener");
+    if (preset && !longText) {
+      toast(`✓ 已打开 ${name}，提示词已预填，直接发送即可`, 3500);
+    } else {
+      const why = !preset ? `${name} 暂不支持自动预填` : `提示词较长（${text.length} 字）`;
+      navigator.clipboard?.writeText(text)
+        .then(() => toast(`✓ 已复制提示词原文 · ${why} · 去 ${name} 页面按 Ctrl+V 粘贴`, 6000))
+        .catch(() => toast(`⚠ 自动复制失败，请先点下方「复制提示词原文」再粘贴到 ${name}`, 6000));
+    }
+    setTimeout(close, 500);
+  }));
 }
 
 export async function communityDetail(id: string): Promise<void> {
@@ -529,10 +633,11 @@ export async function communityDetail(id: string): Promise<void> {
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
       <h1 class="section-title" style="font-size:1.6rem;">${esc(row.title)}</h1>
-      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span>${row.version ? ' <span class="pill pill-version">' + esc(row.version) + '</span>' : ''} · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}${fmtRelative(row.publishedAt || row.createdAt) ? " · " + esc(fmtRelative(row.publishedAt || row.createdAt)) : ""}</div>
+      <div class="muted" style="font-size:.85rem;margin-top:6px;">${row.author === "模法师官方" ? '<span class="pill pill-official">官方</span> ' : '<span class="pill pill-community">社区</span> '}<span class="pill pill-violet">${esc(row.industry)}</span><span class="pill pill-diff diff-${row.difficulty === '专家' ? 3 : row.difficulty === '进阶' ? 2 : 1}">${esc(row.difficulty || '入门')}</span>${row.version ? ' <span class="pill pill-version">' + esc(row.version) + '</span>' : ''} · 作者 ${row.authorId ? `<a href="#/u/${esc(row.authorId)}" class="author-link">${esc(row.author)}</a>` : esc(row.author)} · ${row.status === "draft" ? "草稿" : "已公开"}${fmtRelative(row.publishedAt || row.createdAt) ? " · " + esc(fmtRelative(row.publishedAt || row.createdAt)) : ""}</div>
       ${row.cover ? `<img class="cm-cover" src="${esc(row.cover)}" alt="" style="margin-top:10px;border-radius:10px;max-height:240px;width:100%;object-fit:cover;" onerror="this.style.display='none'" />` : `<div class="cm-cover-ph" style="background:${industryPh(row.industry)};margin-top:10px;"><span>${esc((row.title || "?").slice(0, 1))}</span></div>`}
     </div>
     <div class="mt-2">${tagHtml}</div>
+    ${row.recommendModel ? `<p class="muted" style="margin-top:8px;font-size:.82rem;">🎯 适配：${esc(row.difficulty || '入门')}级 · 推荐 ${esc(row.recommendModel)}</p>` : ""}
     ${row.note ? `<p class="slate" style="margin-top:10px;line-height:1.6;">${esc(row.note)}</p>` : ""}
     <div class="card tpl-card" style="margin-top:16px;">
       <div id="cm-prompt-label" class="live-label" style="margin-bottom:6px;">📋 当前提示词</div>
@@ -550,6 +655,7 @@ export async function communityDetail(id: string): Promise<void> {
       <button id="cm-test-open" class="btn btn-ghost btn-sm">🧪 测试这个提示词</button>
       <button id="cm-prev" class="btn btn-ghost btn-sm">🚀 一键试跑</button>
       <button id="cm-addcol" class="btn btn-ghost btn-sm">📚 加入合集</button>
+      <button id="cm-share" class="btn btn-ghost btn-sm">📤 分享</button>
       ${row.status === "published" ? '<button id="cm-report" class="btn btn-ghost btn-sm">⚠ 举报</button>' : ""}
     </div>
     <div id="cm-test-wrap" class="card tpl-card" style="margin-top:16px;display:none;">
@@ -663,6 +769,8 @@ export async function communityDetail(id: string): Promise<void> {
   if (cmPrev) cmPrev.addEventListener("click", () => openPreviewModal(row));
   const cmAddCol = (document.getElementById("cm-addcol") as HTMLButtonElement);
   if (cmAddCol) cmAddCol.addEventListener("click", () => openAddToCollectionModal(row.id));
+  const shareBtn = (document.getElementById("cm-share") as HTMLButtonElement);
+  if (shareBtn) shareBtn.addEventListener("click", () => openShareMenu(row));
   ctx.refineCtx = communityRefineCtx();
   const testOpen = (document.getElementById("cm-test-open") as HTMLButtonElement);
   if (testOpen) testOpen.addEventListener("click", () => {

@@ -31,14 +31,14 @@ export function metricRate(id: string, score: number, prev: number, title: strin
   fetch("/metrics/rate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, score, prev: prev || 0, title, industry }) }).catch(() => {});
 }
 
-// 轻量 toast 提示
-export function toast(msg: string): void {
+// 轻量 toast 提示（duration 默认 2800ms，可按需延长，例如分享复制场景给足粘贴时间）
+export function toast(msg: string, duration = 2800): void {
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
   document.body.appendChild(t);
   setTimeout(() => t.classList.add("show"), 10);
-  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, 2800);
+  setTimeout(() => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); }, duration);
 }
 
 // 通用二次确认弹窗（替代原生 confirm，风格统一）

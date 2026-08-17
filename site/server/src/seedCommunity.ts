@@ -9,6 +9,8 @@ export interface SeedTpl {
   prompt: string;
   tags: string[];
   note: string;
+  difficulty: string;        // F35-③：入门 / 进阶 / 专家
+  recommendModel: string;    // F35-③：推荐模型，如 "Claude / GPT-4o"
   uses: number;
   favorites: number;
   ratingSum: number;
@@ -22,7 +24,7 @@ export const COMMUNITY_SEED: SeedTpl[] = [
     title: "爆款小红书种草笔记生成器",
     tags: ["小红书", "种草", "营销文案"],
     note: "输入产品与卖点，生成带钩子标题+场景化正文+精准话题标签的小红书笔记（含输入→输出范例）。",
-    uses: 320, favorites: 88, ratingSum: 270, ratingCount: 32,
+    uses: 320, favorites: 88, ratingSum: 270, ratingCount: 32, difficulty: "入门", recommendModel: "Claude / GPT-4o",
     prompt: `# 角色与背景
 你是操盘过多个百万级爆款的小红书内容负责人，精通平台 CES 分发机制（点赞/收藏/评论/转发加权）与 18–30 岁主力用户的真实语境。你拒绝「硬广翻译机」式写作，擅长把卖点改写成「像闺蜜真实安利」的笔记，让人想收藏、想照着买。
 
@@ -63,7 +65,7 @@ export const COMMUNITY_SEED: SeedTpl[] = [
     title: "代码评审与优化建议助手",
     tags: ["Code Review", "重构", "最佳实践"],
     note: "粘贴代码片段，按优先级给出问题点、风险与可直接替换的优化片段（含输入→输出范例）。",
-    uses: 540, favorites: 150, ratingSum: 460, ratingCount: 55,
+    uses: 540, favorites: 150, ratingSum: 460, ratingCount: 55, difficulty: "进阶", recommendModel: "Claude / GPT-4o",
     prompt: `# 角色与背景
 你是资深技术 Lead / 架构师，负责把关代码质量与系统稳定性。你的评审风格务实：给可落地方案而非空泛批评，任何改动都要能直接替换、并标注理由与风险。
 
@@ -110,7 +112,7 @@ def div(a: float, b: float) -> float:
     title: "结构化周报/日报生成器",
     tags: ["周报", "职场", "效率"],
     note: "把零散工作流水整理成上级爱看的结构化周报（结果导向+量化+动词开头，含范例）。",
-    uses: 410, favorites: 95, ratingSum: 360, ratingCount: 44,
+    uses: 410, favorites: 95, ratingSum: 360, ratingCount: 44, difficulty: "入门", recommendModel: "Kimi / 通义千问",
     prompt: `# 角色与背景
 你是职场写作教练，擅长把流水账提炼成上级一眼看懂、体现价值的结构化周报。你坚持「结果导向、量化、动词开头」。
 
@@ -150,7 +152,7 @@ def div(a: float, b: float) -> float:
     title: "互动式教案设计器",
     tags: ["教案", "教学", "互动"],
     note: "按知识点与学情生成可落地的互动探究教案（目标可观测+分层，含范例）。",
-    uses: 180, favorites: 60, ratingSum: 150, ratingCount: 20,
+    uses: 180, favorites: 60, ratingSum: 150, ratingCount: 20, difficulty: "进阶", recommendModel: "Claude / Gemini",
     prompt: `# 角色与背景
 你是教研专家，信奉「做中学」，能按学段与学情把知识点设计成可落地的互动探究教案，目标可观测、活动不脱节。
 
@@ -192,7 +194,7 @@ def div(a: float, b: float) -> float:
     title: "商品详情页卖点提炼",
     tags: ["电商", "详情页", "转化"],
     note: "从产品参数提炼打动人的购买理由与详情结构（用户视角+证据，含范例）。",
-    uses: 260, favorites: 70, ratingSum: 210, ratingCount: 26,
+    uses: 260, favorites: 70, ratingSum: 210, ratingCount: 26, difficulty: "入门", recommendModel: "Claude / GPT-4o",
     prompt: `# 角色与背景
 你是电商转化率专家，擅长把产品参数翻译成用户「为什么要买」的购买理由，既会说人话又有说服力，绝不油腻。
 
@@ -233,7 +235,7 @@ def div(a: float, b: float) -> float:
     title: "个人理财规划建议顾问",
     tags: ["理财", "规划", "个人金融"],
     note: "基于收支与目标给出可执行的配置框架（科普，提示风险，含范例表格）。",
-    uses: 150, favorites: 40, ratingSum: 120, ratingCount: 16,
+    uses: 150, favorites: 40, ratingSum: 120, ratingCount: 16, difficulty: "进阶", recommendModel: "GPT-4o / Claude",
     prompt: `# 角色与背景
 你是持牌理财规划师，仅作科普教育、不构成投资建议；风格稳健，始终把风险与适配性放在前面。
 
@@ -274,7 +276,7 @@ def div(a: float, b: float) -> float:
     title: "健康科普文章通俗化改写",
     tags: ["科普", "健康", "改写"],
     note: "把专业医学内容改写成易懂、准确、无误导的科普文（类比+免责，含范例）。",
-    uses: 200, favorites: 66, ratingSum: 165, ratingCount: 22,
+    uses: 200, favorites: 66, ratingSum: 165, ratingCount: 22, difficulty: "进阶", recommendModel: "Claude / Gemini",
     prompt: `# 角色与背景
 你是医学科普编辑，既懂专业又懂普通人，绝不为了可读而牺牲科学准确性，涉及诊断治疗必引导就医。
 
@@ -316,7 +318,7 @@ def div(a: float, b: float) -> float:
     title: "合同条款风险点审查清单",
     tags: ["合同", "法律", "风控"],
     note: "扫描合同关键条款，提示常见风险与可替换修改措辞（非法律意见，含范例）。",
-    uses: 130, favorites: 50, ratingSum: 110, ratingCount: 15,
+    uses: 130, favorites: 50, ratingSum: 110, ratingCount: 15, difficulty: "专家", recommendModel: "Claude / GPT-4o",
     prompt: `# 角色与背景
 你是企业法务（提示：本输出不构成正式法律意见，重大合同请持牌律师复核），立场偏向保护我方、识别对等风险。
 

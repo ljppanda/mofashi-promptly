@@ -272,6 +272,8 @@ export interface CommunityRow {
   note: string;
   cover: string | null;   // 封面图链接 / data URL（轻量版封面方案；空=无封面，前端显示行业占位图）
   version: string | null; // 模板版本徽标（报告 #7，对标 ProBazaar v3.0）；空=未设
+  difficulty: string;     // 模板难度（F35-③）：入门 / 进阶 / 专家；空或未知兜底「入门」
+  recommendModel: string | null; // 推荐模型（F35-③）：如 "Claude / GPT-4o"；空=未指定
   status: string;
   createdAt: number;
   publishedAt: number | null;
@@ -289,6 +291,8 @@ function communityFromRow(r: any): CommunityRow {
   return {
     id: r.id, title: r.title, industry: r.industry, author: r.author, authorId: r.author_id ?? null,
     prompt: r.prompt, tags, note: r.note, cover: r.cover ?? null, version: r.version ?? null, status: r.status,
+    difficulty: (r.difficulty && ["入门", "进阶", "专家"].includes(r.difficulty)) ? r.difficulty : "入门",
+    recommendModel: r.recommend_model ?? null,
     createdAt: r.created_at, publishedAt: r.published_at,
     uses: r.uses, favorites: r.favorites,
     ratingSum: r.rating_sum, ratingCount: r.rating_count,
@@ -296,7 +300,7 @@ function communityFromRow(r: any): CommunityRow {
   };
 }
 
-export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string; cover?: string; version?: string }): CommunityRow {
+export function publishCommunity(rec: { id: string; title: string; industry: string; author?: string; authorId?: string | null; prompt: string; tags?: string[]; note?: string; cover?: string; version?: string; difficulty?: string }): CommunityRow {
   const now = Date.now();
   const normPrompt = (rec.prompt || "").trim();
   // 幂等去重（用户体验修复）：同一作者 + 相同标题 + 相同正文，视为重复发布，
@@ -313,10 +317,11 @@ export function publishCommunity(rec: { id: string; title: string; industry: str
   }
   // 作者名以服务端鉴权身份为准（authorId 绑定），杜绝客户端伪造"李鬼"。
   const version = rec.version || "v1.0"; // 首次发布即 v1.0（报告 #7 版本徽标）
+  const difficulty = rec.difficulty || "入门"; // F35-③ 难度，发布默认「入门」
   db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,?,?, 'draft',?,NULL,0,0,0,0)`,
-  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", version, now);
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,difficulty,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?, 'draft',?,NULL,0,0,0,0)`,
+  ).run(rec.id, rec.title, rec.industry, rec.author || "匿名", rec.authorId ?? null, rec.prompt, JSON.stringify(rec.tags || []), rec.note || "", rec.cover || "", version, difficulty, now);
   return getCommunity(rec.id)!;
 }
 
@@ -353,18 +358,18 @@ export function seedCommunityIfEmpty(): number {
     const upv = db.prepare("UPDATE community SET version='v1.0' WHERE id = ? AND (version IS NULL OR version='')");
     for (const s of COMMUNITY_SEED) { upv.run(s.id); }
     // 内容升级（本轮）：官方种子正文/标签/备注同步刷新为生产级骨架；仅作用于官方保留 ID，不触碰用户发布内容。
-    const upc = db.prepare("UPDATE community SET prompt = ?, tags = ?, note = ? WHERE id = ? AND author = '模法师官方'");
-    for (const s of COMMUNITY_SEED) { upc.run(s.prompt, JSON.stringify(s.tags), s.note, s.id); }
+    const upc = db.prepare("UPDATE community SET prompt = ?, tags = ?, note = ?, difficulty = ?, recommend_model = ? WHERE id = ? AND author = '模法师官方'");
+    for (const s of COMMUNITY_SEED) { upc.run(s.prompt, JSON.stringify(s.tags), s.note, s.difficulty || "入门", s.recommendModel || null, s.id); }
     return m;
   }
   const stmt = db.prepare(
-    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
-     VALUES(?,?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
+    `INSERT INTO community(id,title,industry,author,author_id,prompt,tags,note,cover,version,difficulty,recommend_model,status,created_at,published_at,uses,favorites,rating_sum,rating_count)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'published',?,?,?,?,?,?)`,
   );
   let n = 0;
   for (const s of COMMUNITY_SEED) {
     const ts = now - n * 3600_000; // 每小时一篇，拉开发布时间，使「最新」排序有梯度
-    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, coverDataUri(s.industry, s.title), "v1.0", ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
+    stmt.run(s.id, s.title, s.industry, "模法师官方", null, s.prompt, JSON.stringify(s.tags), s.note, coverDataUri(s.industry, s.title), "v1.0", s.difficulty || "入门", s.recommendModel || null, ts, ts, s.uses, s.favorites, s.ratingSum, s.ratingCount);
     n++;
   }
   return n;

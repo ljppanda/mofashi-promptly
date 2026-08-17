@@ -188,6 +188,9 @@ h1, h2, h3, h4,
 .pill-official { background: var(--brand); color: #fff; border-color: transparent; } /* 官方·朱砂印 */
 .pill-community { background: #2c2620; color: #f3ead9; border-color: transparent; } /* 社区·墨印 */
 .pill-version { background: #f3ecdd; color: #8a6320; border-color: #ecd9b0; }
+.pill-diff.diff-1 { background: #ecf5ee; color: #2f7d56; border-color: #cfe8d8; } /* 入门·墨绿 */
+.pill-diff.diff-2 { background: #f7efdd; color: #8a6320; border-color: #ecd9b0; } /* 进阶·描金 */
+.pill-diff.diff-3 { background: #f6e2df; color: #b5362a; border-color: #eccec8; } /* 专家·朱砂 */
 .stat-chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 88px; padding: 10px 14px; border-radius: 12px; background: var(--brand-50); border: 1px solid var(--brand-100); }
 .stat-num { font-size: 1.25rem; font-weight: 700; color: var(--brand-700); line-height: 1.1; }
 .stat-label { font-size: .72rem; color: var(--slate); margin-top: 2px; }
@@ -550,6 +553,18 @@ h1, h2, h3, h4,
   border-radius: 14px;
   padding: 20px;
 }
+/* F35-② 分享到外部 AI 平台弹层 */
+.share-card { max-width: 440px; }
+.share-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
+.share-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; border: 1px solid #e7dcc4; border-radius: 10px;
+  background: #fffdf6; cursor: pointer; font-family: inherit; font-size: .88rem; color: var(--ink);
+  text-align: left; transition: all .15s;
+}
+.share-item:hover { border-color: var(--brand); background: #fbf2ec; transform: translateY(-1px); }
+.share-ico { font-size: 1.15rem; line-height: 1; }
+.share-tag { margin-left: auto; font-size: .64rem; color: #9a8f7d; border: 1px solid #e0d4bd; border-radius: 6px; padding: 1px 5px; }
 .toast {
   position: fixed;
   left: 50%;
