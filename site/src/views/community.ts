@@ -207,11 +207,48 @@ export function reportDialog(id: string, title: string): void {
   });
 }
 
+// F36 社区量级背书条：用全站聚合指标（/metrics/summary）做「社会证明」，零后端改动。
+// 展示公开提示词数 / 累计使用数 / 累计收藏数，给新访客即时信任感（report-2026-08-18 #3）。
+function fmtNum(n: number | undefined): string {
+  const v = typeof n === "number" && isFinite(n) ? n : 0;
+  if (v >= 10000) return (v / 10000).toFixed(v >= 100000 ? 0 : 1) + "万";
+  return String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function renderScaleBar(s: any): void {
+  const el = document.getElementById("cm-scale-bar");
+  if (!el) return;
+  if (!s) { el.innerHTML = ""; return; }
+  const pub = fmtNum(s.communityPublished);
+  const uses = fmtNum(s.totalUses);
+  const fav = fmtNum(s.totalFavorites);
+  const creators = s.creators ? fmtNum(s.creators) : null;
+  const items = [
+    { num: pub, label: "公开提示词" },
+    { num: uses, label: "累计使用" },
+    { num: fav, label: "累计收藏" },
+  ];
+  const chips = items.map((it, i) =>
+    `<div class="cm-scale-item">
+       <div class="cm-scale-num">${it.num}</div>
+       <div class="cm-scale-label">${it.label}</div>
+     </div>${i < items.length - 1 ? '<span class="cm-scale-sep"></span>' : ""}`
+  ).join("");
+  const tail = creators ? ` · 来自 <b>${creators}</b> 位创作者` : "";
+  el.innerHTML = `
+    <div class="cm-scale-head">
+      <span class="cm-scale-kicker">📣 社区数据 · 真实量级</span>
+    </div>
+    <div class="cm-scale-grid">${chips}</div>
+    <div class="cm-scale-foot">这些提示词已被真实使用与收藏${tail}，变量化模板，填一句目标即可生成</div>
+  `;
+}
+
 export async function community(): Promise<void> {
   setMeta("社区广场 · 模法师 Promptly", "浏览社区成员分享的 AI 提示词模板，克隆、测试、评分、评论。");
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
     <h1 class="section-title" style="font-size:1.7rem;margin-top:8px;">社区广场</h1>
+    <div id="cm-scale-bar" class="cm-scale-bar mt-3"></div>
     <div class="flex items-center gap-2 mt-3 flex-wrap">
       <button class="btn btn-ghost btn-sm tab-btn active" data-tab="square">🏠 社区广场</button>
       <button class="btn btn-ghost btn-sm tab-btn" data-tab="mine">📂 我的发布</button>
@@ -376,8 +413,10 @@ export async function community(): Promise<void> {
   if (qEl) qEl.addEventListener("keydown", e => { if (e.key === "Enter") load(); });
   if (sortEl) sortEl.addEventListener("change", load);
   if (industryEl) industryEl.addEventListener("change", load);
-  // 提案2：拉取聚合指标，到达后刷新广场以显示「今日新增 N 条」
-  loadSummary().then(s => { summaryCache = s; if (tab === "square") load(); });
+  // 提案2：拉取聚合指标，到达后刷新广场以显示「今日新增 N 条」；F36 先渲染量级背书条
+  loadSummary().then(s => { summaryCache = s; renderScaleBar(s); if (tab === "square") load(); });
+  // 已有缓存时立即渲染背书条，避免空白等待
+  if (summaryCache) renderScaleBar(summaryCache);
   load();
 }
 
