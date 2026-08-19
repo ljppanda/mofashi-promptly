@@ -172,7 +172,10 @@ h1, h2, h3, h4,
 .cm-tagcloud { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cm-tag { border: 1px solid var(--brand-100); background: #fff; color: var(--slate); font-size: .74rem; padding: 3px 10px; border-radius: 999px; cursor: pointer; transition: .15s; }
 .cm-tag:hover { background: var(--brand-50); border-color: var(--brand); }
+.cm-tag.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+.cm-tag.active .cm-tag-c { color: rgba(255,255,255,.8); }
 .cm-tag-c { color: var(--muted); margin-left: 4px; font-size: .68rem; }
+.cm-tag-clear { border-color: var(--line); color: var(--brand-700); font-weight: 600; }
 .cm-card:hover .cm-try { box-shadow: 0 0 0 2px var(--brand); }
 
 /* ---------- 标签 / 胶囊 ---------- */

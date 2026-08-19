@@ -20,6 +20,7 @@ export function myTemplates(): void {
       <p class="muted" style="font-size:.82rem;margin-top:6px;line-height:1.6;">下方是「本设备本地」保存的模板（换浏览器或清缓存可能丢失）。登录后会存到你的云端专属库，任意设备都能看到自己的模板。</p>
       <button id="my-login" class="btn btn-primary btn-sm" style="margin-top:8px;">登录 / 注册</button>
     </div>`;
+  let activeTag: string | null = null; // F37 标签筛选状态
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
     <div class="flex items-center justify-between mt-2">
@@ -29,36 +30,67 @@ export function myTemplates(): void {
     ${authBanner}
     <p class="muted" style="font-size:.8rem;margin-top:10px;">${authed ? "这些是登录账号下的专属模板。" : "（以下为本设备本地模板）"}</p>
     ${all.length
-      ? groupedMineHtml(all)
+      ? `<div id="my-tags" class="cm-tagcloud mt-3"></div>
+         <div id="my-body" class="mt-4"></div>`
       : '<p class="muted" style="margin-top:16px;">还没有收藏的模板。在模板详情页点「收藏到我的模板」即可，AI 生成的草稿也会自动保留在此；也可点右上「导入模板」载入本地 JSON。</p>'}
   `;
   const lb = (document.getElementById("my-login") as HTMLButtonElement);
   if (lb && window.Auth && window.Auth.ensure) lb.addEventListener("click", () => { window.Auth!.ensure().then((t) => { if (t) myTemplates(); }); });
   const ib = (document.getElementById("my-import") as HTMLButtonElement);
   if (ib) ib.addEventListener("click", openImportFile);
-  ctx.appEl().querySelectorAll(".del-btn").forEach((b) => b.addEventListener("click", (e) => {
-    e.preventDefault();
-    const slug = b.getAttribute("data-slug");
-    if (!slug) return;
-    if (!confirm("确定删除该模板？删除后将从「我的模板」移除（热度榜统计不受影响）。")) return;
-    if (Store.hasMine(slug)) Store.removeMine(slug);
-    else Store.removeDraft(slug);
-    myTemplates();
-  }));
-  ctx.appEl().querySelectorAll(".pub-btn").forEach((b) => b.addEventListener("click", (e) => {
-    e.preventDefault();
-    const slug = b.getAttribute("data-slug");
-    if (!slug) return;
-    const t = Store.findAny(slug);
-    if (!t) return;
-    openPublishForm({
-      title: t.title,
-      industry: t.industry || "其他",
-      tags: t.tags || [],
-      prompt: t.prompt || "",
-      note: t.summary || "",
-    });
-  }));
+
+  // F37 标签云筛选：按当前全部模板的标签频率排序，点击即按该标签过滤分组列表
+  function renderTags(): void {
+    const el = document.getElementById("my-tags");
+    if (!el) return;
+    const freq: Record<string, number> = {};
+    all.forEach((t: any) => (t.tags || []).forEach((tg: string) => { freq[tg] = (freq[tg] || 0) + 1; }));
+    const tags = Object.entries(freq).sort((a: any, b: any) => b[1] - a[1]).slice(0, 30).map(([t, c]) => ({ t, c }));
+    el.innerHTML = tags.length
+      ? `<span class="muted" style="font-size:.75rem;margin-right:6px;">🔖 按标签筛选</span>` +
+        tags.map((x: any) => `<button class="cm-tag${activeTag === x.t ? " active" : ""}" data-tag="${esc(x.t)}">#${esc(x.t)} <span class="cm-tag-c">${x.c}</span></button>`).join("") +
+        (activeTag ? `<button class="cm-tag cm-tag-clear" data-clear="1">✕ 清除筛选</button>` : "")
+      : "";
+    el.querySelectorAll<HTMLElement>(".cm-tag").forEach(b => b.addEventListener("click", () => {
+      if (b.getAttribute("data-clear")) { activeTag = null; }
+      else { const tg = b.getAttribute("data-tag") || ""; activeTag = activeTag === tg ? null : tg; }
+      render();
+    }));
+  }
+
+  function renderBody(): void {
+    const el = (document.getElementById("my-body") as HTMLElement);
+    if (!el) return;
+    const list = activeTag ? all.filter((t: any) => (t.tags || []).includes(activeTag)) : all;
+    const head = activeTag ? `<p class="muted" style="font-size:.8rem;margin-bottom:6px;">已筛选标签 <b>#${esc(activeTag)}</b>，共 ${list.length} 个模板</p>` : "";
+    el.innerHTML = head + (list.length ? groupedMineHtml(list) : `<p class="muted">没有带「#${esc(activeTag || "")}」标签的模板。</p>`);
+    el.querySelectorAll<HTMLElement>(".del-btn").forEach(b => b.addEventListener("click", (e) => {
+      e.preventDefault();
+      const slug = b.getAttribute("data-slug");
+      if (!slug) return;
+      if (!confirm("确定删除该模板？删除后将从「我的模板」移除（热度榜统计不受影响）。")) return;
+      if (Store.hasMine(slug)) Store.removeMine(slug);
+      else Store.removeDraft(slug);
+      render();
+    }));
+    el.querySelectorAll<HTMLElement>(".pub-btn").forEach(b => b.addEventListener("click", (e) => {
+      e.preventDefault();
+      const slug = b.getAttribute("data-slug");
+      if (!slug) return;
+      const t = Store.findAny(slug);
+      if (!t) return;
+      openPublishForm({
+        title: t.title,
+        industry: t.industry || "其他",
+        tags: t.tags || [],
+        prompt: t.prompt || "",
+        note: t.summary || "",
+      });
+    }));
+  }
+
+  function render(): void { renderTags(); renderBody(); }
+  render();
 }
 
 // 我的模板专属卡片：通用卡片 + 删除按钮
