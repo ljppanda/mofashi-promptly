@@ -178,6 +178,27 @@ h1, h2, h3, h4,
 .cm-tag-clear { border-color: var(--line); color: var(--brand-700); font-weight: 600; }
 .cm-card:hover .cm-try { box-shadow: 0 0 0 2px var(--brand); }
 
+/* ---------- 发送前实时评分弹层（F38） ---------- */
+.score-modal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(29,24,18,.42); padding: 16px; backdrop-filter: blur(2px); }
+.score-card { width: min(440px, 94vw); background: linear-gradient(180deg, #fbf6ec 0%, #f5eedd 100%); border: 1px solid var(--brand-100); border-radius: 16px; padding: 20px 22px; box-shadow: 0 18px 50px rgba(29,24,18,.28); }
+.score-card-ttl { font-family: var(--font-display); font-size: 1.05rem; font-weight: 800; color: var(--ink); display: flex; align-items: baseline; gap: 8px; }
+.score-card-sub { font-size: .74rem; font-weight: 500; color: var(--slate); }
+.score-loading { padding: 28px 0; text-align: center; color: var(--slate); font-size: .9rem; }
+.score-error { padding: 20px 0; text-align: center; color: var(--brand-700); font-size: .88rem; line-height: 1.6; }
+.score-head { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.score-num { font-family: var(--font-display); font-weight: 800; font-size: 3rem; line-height: 1; color: var(--brand-700); }
+.score-num-unit { font-size: 1rem; color: var(--slate); margin-left: 2px; }
+.score-kind { font-size: .82rem; font-weight: 700; color: #fff; background: var(--brand); padding: 3px 12px; border-radius: 999px; }
+.score-bars { margin-top: 16px; display: flex; flex-direction: column; gap: 9px; }
+.score-bar-row { display: flex; align-items: center; gap: 10px; }
+.score-bar-label { width: 62px; font-size: .78rem; color: var(--slate); flex: none; }
+.score-bar { flex: 1; height: 8px; border-radius: 999px; background: #e7ddc8; overflow: hidden; }
+.score-bar-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--brand) 0%, var(--brand-700) 100%); transition: width .5s ease; }
+.score-bar-fill.low { background: linear-gradient(90deg, #c9923f 0%, #b5362a 100%); }
+.score-bar-val { width: 34px; text-align: right; font-size: .76rem; color: var(--slate); flex: none; }
+.score-note { margin-top: 16px; padding: 12px 14px; background: #fff; border: 1px solid var(--brand-100); border-radius: 10px; font-size: .82rem; line-height: 1.65; color: var(--ink); }
+.score-foot { margin-top: 18px; text-align: right; }
+
 /* ---------- 标签 / 胶囊 ---------- */
 .pill {
   display: inline-flex; align-items: center; gap: 4px;

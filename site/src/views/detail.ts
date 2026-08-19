@@ -6,6 +6,7 @@ import { ctx } from "../core/ctx.js";
 import { esc, setMeta, fmtUsage, metricBump, metricRate, toast, diffLines, fmtDateTime } from "../core/ui.js";
 import { GEN_STEPS_3, ALL_INDUSTRIES, MAX_CLARIFY_ROUNDS } from "../core/config.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
+import { judgePromptText, PROMPT_DIM_LABELS, scoreTo100 } from "../core/judge.js";
 import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "./refine.js";
 import { openPublishForm } from "./community.js";
 import { openCompareModal } from "./compare.js";
@@ -91,6 +92,7 @@ export function detail(slug: string): void {
         <div class="flex gap-2 mt-3 flex-wrap items-center">
           <button id="ed-save" class="btn btn-primary btn-sm">💾 保存修改</button>
           <button id="ed-cancel" class="btn btn-ghost btn-sm">取消</button>
+          <button id="ed-score" class="btn btn-ghost btn-sm">⚖️ 评一下骨架</button>
           <span id="ed-msg" class="muted" style="font-size:.75rem;"></span>
         </div>
       </div>
@@ -129,6 +131,7 @@ export function detail(slug: string): void {
         <button id="use-dl-md" class="btn btn-ghost btn-sm">下载 .md</button>
         <button id="use-dl-txt" class="btn btn-ghost btn-sm">下载 .txt</button>
         <button id="use-publish" class="btn btn-ghost btn-sm">📣 发布到社区</button>
+        <button id="use-score" class="btn btn-ghost btn-sm">⚖️ 评一下</button>
         <span id="use-usage" class="muted" style="font-size:.75rem;"></span>
       </div>
     </div>
@@ -259,6 +262,11 @@ export function detail(slug: string): void {
     if (histBtn) histBtn.addEventListener("click", openHistory);
     const optBtn = (document.getElementById("opt-btn") as HTMLButtonElement);
     if (optBtn) optBtn.addEventListener("click", () => openOptimizeModal(ctx.current));
+    const edScore = (document.getElementById("ed-score") as HTMLButtonElement);
+    if (edScore) edScore.addEventListener("click", () => {
+      const p = (document.getElementById("ed-prompt") as HTMLTextAreaElement).value;
+      scoreCurrentPrompt(p, { title: ctx.current.title });
+    });
   }
   // 「示例预览」对所有模板开放：内置模板虽不可编辑，也应能一键生成示例看效果
   const prevBtn = (document.getElementById("prev-btn") as HTMLButtonElement);
@@ -269,7 +277,77 @@ export function detail(slug: string): void {
     openCompareModal(ctx.current._lastPrompt, "请用 3 句话介绍你能帮我做什么，并各举一例。");
   });
 
+  const scoreBtn = (document.getElementById("use-score") as HTMLButtonElement);
+  if (scoreBtn) scoreBtn.addEventListener("click", () => {
+    scoreCurrentPrompt(ctx.current._lastPrompt || "", { title: tpl.title });
+  });
+
   loadRateInfo(tplId(ctx.current));
+}
+
+// 发送前实时评分：调用 judgePromptText，含无 Key 提示与 loading 态。
+async function scoreCurrentPrompt(promptText: string, meta: { title?: string; goal?: string }): Promise<void> {
+  const text = (promptText || "").trim();
+  if (!text) { toast("还没有可评分的提示词，先生成或编辑出一份吧"); return; }
+  openScoreModal(null); // loading
+  try {
+    const r = await judgePromptText(text, meta);
+    openScoreModal(r, meta);
+  } catch (e: any) {
+    const msg = e && e.message ? e.message : String(e);
+    if (/未配置 API Key|未填写 API Key/.test(msg)) {
+      openScoreModal({ error: "请先到「设置」页填写 API Key，才能使用实时评分。" });
+    } else {
+      openScoreModal({ error: "评分失败：" + msg });
+    }
+  }
+}
+
+// 评分弹层：result 为 null→loading；{error}→错误；JudgeResult→打分结果。
+function openScoreModal(result: any, meta: { title?: string } = {}): void {
+  const old = document.getElementById("score-modal");
+  if (old) old.remove();
+  const overlay = document.createElement("div");
+  overlay.id = "score-modal";
+  overlay.className = "score-modal";
+  let body = "";
+  if (!result) {
+    body = `<div class="score-loading">⚖️ 裁判模型评分中…</div>`;
+  } else if (result.error) {
+    body = `<div class="score-error">${esc(result.error)}</div>`;
+  } else if (!result.available) {
+    body = `<div class="score-error">评分解析失败，请重试。</div>`;
+  } else {
+    const score = scoreTo100(result.total);
+    const bars = PROMPT_DIM_LABELS.map(([k, label]) => {
+      const v = (result.dims && result.dims[k]) || 0;
+      const pct = Math.max(0, Math.min(100, (v / 5) * 100));
+      const low = v < 3;
+      return `<div class="score-bar-row">
+        <span class="score-bar-label">${label}</span>
+        <span class="score-bar"><span class="score-bar-fill${low ? " low" : ""}" style="width:${pct}%"></span></span>
+        <span class="score-bar-val">${v}/5</span>
+      </div>`;
+    }).join("");
+    const kind = score >= 80 ? "优" : score >= 60 ? "良" : score >= 40 ? "中" : "待改进";
+    body = `
+      <div class="score-head">
+        <div class="score-num">${score}<span class="score-num-unit">/100</span></div>
+        <div class="score-kind">${kind}</div>
+      </div>
+      <div class="score-bars">${bars}</div>
+      <div class="score-note">💡 ${esc(result.note || "（无建议）")}</div>`;
+  }
+  overlay.innerHTML = `
+    <div class="score-card">
+      <div class="score-card-ttl">⚖️ 提示词质量评分${meta.title ? `<span class="score-card-sub">${esc(meta.title)}</span>` : ""}</div>
+      ${body}
+      <div class="score-foot"><button id="score-close" class="btn btn-primary btn-sm">知道了</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = document.getElementById("score-close");
+  if (close) close.addEventListener("click", () => overlay.remove());
 }
 
 // 高亮用户已选/将选的星数
