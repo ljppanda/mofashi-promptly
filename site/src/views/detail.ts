@@ -93,6 +93,7 @@ export function detail(slug: string): void {
           <button id="ed-save" class="btn btn-primary btn-sm">💾 保存修改</button>
           <button id="ed-cancel" class="btn btn-ghost btn-sm">取消</button>
           <button id="ed-score" class="btn btn-ghost btn-sm">⚖️ 评一下骨架</button>
+          <button id="ed-enhance" class="btn btn-ghost btn-sm">✨ 增强</button>
           <span id="ed-msg" class="muted" style="font-size:.75rem;"></span>
         </div>
       </div>
@@ -266,6 +267,30 @@ export function detail(slug: string): void {
     if (edScore) edScore.addEventListener("click", () => {
       const p = (document.getElementById("ed-prompt") as HTMLTextAreaElement).value;
       scoreCurrentPrompt(p, { title: ctx.current.title });
+    });
+    // r19#7：编辑态「✨ 增强」——复用 F13 优化闭环，优化版写回编辑框并落 F10 版本（before/after 可回滚）
+    const edEnhance = (document.getElementById("ed-enhance") as HTMLButtonElement);
+    if (edEnhance) edEnhance.addEventListener("click", () => {
+      const tempTpl = {
+        ...ctx.current,
+        title: (document.getElementById("ed-title") as HTMLInputElement).value.trim() || ctx.current.title,
+        summary: (document.getElementById("ed-summary") as HTMLInputElement).value.trim(),
+        industry: (document.getElementById("ed-industry") as HTMLSelectElement).value,
+        prompt: (document.getElementById("ed-prompt") as HTMLTextAreaElement).value,
+      };
+      openOptimizeModal(tempTpl, (rec: any) => {
+        ctx.current.title = rec.title ?? ctx.current.title;
+        ctx.current.summary = rec.summary ?? ctx.current.summary;
+        ctx.current.industry = rec.industry ?? ctx.current.industry;
+        ctx.current.prompt = rec.prompt;
+        const ta = (document.getElementById("ed-prompt") as HTMLTextAreaElement);
+        if (ta) ta.value = rec.prompt;
+        Store.addMine(JSON.parse(JSON.stringify(ctx.current)));
+        const msg = document.getElementById("ed-msg");
+        if (msg) msg.textContent = "✓ 已采用 AI 优化版（编辑框已更新，可在「历史版本」对比 before/after）";
+        toast("✓ 已采用优化版，并存入新版本");
+        detail(ctx.current.slug); // 重渲染以刷新版本徽标等
+      });
     });
   }
   // 「示例预览」对所有模板开放：内置模板虽不可编辑，也应能一键生成示例看效果

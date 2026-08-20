@@ -27,7 +27,9 @@ function genSamples(t: any, n: number): string[] {
   return out;
 }
 
-export function openOptimizeModal(t: any): void {
+// onApply 可选：编辑态「✨ 增强」传入，优化版应用后回调（写回编辑框 + 落 F10 版本）；
+// 不传则为默认行为（直接 Store.addMine 存为新版本并关闭弹窗）。
+export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
   const settings = Store.getSettings();
   const ov = document.createElement("div");
   ov.className = "modal-overlay";
@@ -242,9 +244,15 @@ export function openOptimizeModal(t: any): void {
   (document.getElementById("opt-apply") as HTMLButtonElement)?.addEventListener("click", () => {
     if (!newPrompt) return;
     const rec = { ...t, prompt: newPrompt };
-    Store.addMine(rec);
-    toast("✓ 已保存优化版（可在「历史版本」回滚）");
-    close();
+    if (onApply) {
+      // 编辑态增强：交给调用方写回 + 落版本，再关弹窗
+      onApply(rec);
+      close();
+    } else {
+      Store.addMine(rec);
+      toast("✓ 已保存优化版（可在「历史版本」回滚）");
+      close();
+    }
   });
   (document.getElementById("opt-discard") as HTMLButtonElement)?.addEventListener("click", () => {
     actEl.style.display = "none";
