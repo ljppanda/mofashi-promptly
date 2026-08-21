@@ -519,7 +519,7 @@ export function communityCard(r: any, tab: string): string {
   const relTime = fmtRelative(r.publishedAt || r.createdAt);
   const isOfficial = r.author === "模法师官方";
   const authorHtml = r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author);
-  const ratingStr = r.avgRating ? `${r.avgRating.toFixed(1)} · ${r.ratingCount ?? 0} 人评分` : "—";
+  const ratingStr = r.avgRating ? `${r.avgRating.toFixed(1)}/5 · ${r.ratingCount ?? 0} 人评分` : "—";
   const recModels = (r.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).filter(Boolean).slice(0, 2);
   const recBadge = recModels.length ? `<span class="trust-badge trust-amber">🎯 已测 ${esc(recModels.join("/"))}</span>` : "";
   const showTags = tab !== "home";
@@ -677,7 +677,7 @@ export async function communityDetail(id: string): Promise<void> {
   if (isOfficialD) trustBits.push("✓ 官方认证");
   else if (row.authorId) trustBits.push("✓ 已认证作者");
   if (recModelsD.length) trustBits.push("🎯 已测 " + recModelsD.join("/"));
-  if (row.avgRating) trustBits.push("★ " + row.avgRating + " · " + (row.ratingCount ?? 0) + " 人评分");
+  if (row.avgRating) trustBits.push("★ " + row.avgRating + "/5 · " + (row.ratingCount ?? 0) + " 人评分");
   const trustRow2 = trustBits.length ? `<div class="cm-trust mt-2">${trustBits.map(p => `<span class="trust-badge ${p.startsWith("★") ? "trust-rate" : p.startsWith("🎯") ? "trust-amber" : "trust-ok"}">${esc(p)}</span>`).join("")}</div>` : "";
   ctx.appEl().innerHTML = `
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
@@ -1001,7 +1001,7 @@ export function cLoadRate(row: any): void {
   if (!info) return;
   highlightStarsC(row.id);
   const my = Store.getRating(row.id);
-  info.textContent = `当前均分 ${row.avgRating}/10 分 · ${row.ratingCount || 0} 人评分` + (my ? ` · 你给了 ${my} 星` : "");
+  info.textContent = `当前均分 ${row.avgRating}/5 分 · ${row.ratingCount || 0} 人评分` + (my ? ` · 你给了 ${my} 星` : "");
 }
 
 export function cRate(row: any, score: number): void {
@@ -1009,7 +1009,7 @@ export function cRate(row: any, score: number): void {
   LLM.communityRate(row.id, score, prev).then(r => {
     Store.setRating(row.id, score);
     const info = (document.getElementById("cm-rate-info") as HTMLElement);
-    if (info) info.textContent = `当前均分 ${r.avgRating}/10 分 · ${r.ratingCount || 0} 人评分 · 你给了 ${score} 星`;
+    if (info) info.textContent = `当前均分 ${r.avgRating}/5 分 · ${row.ratingCount || 0} 人评分 · 你给了 ${score} 星`;
     highlightStarsC(row.id);
     const m = (document.getElementById("cm-msg") as HTMLElement);
     if (m) { m.textContent = "已评分 " + score + " 星 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); }

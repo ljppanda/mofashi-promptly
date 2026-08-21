@@ -360,6 +360,9 @@ export function seedCommunityIfEmpty(): number {
     // 内容升级（本轮）：官方种子正文/标签/备注同步刷新为生产级骨架；仅作用于官方保留 ID，不触碰用户发布内容。
     const upc = db.prepare("UPDATE community SET prompt = ?, tags = ?, note = ?, difficulty = ?, recommend_model = ? WHERE id = ? AND author = '模法师官方'");
     for (const s of COMMUNITY_SEED) { upc.run(s.prompt, JSON.stringify(s.tags), s.note, s.difficulty || "入门", s.recommendModel || null, s.id); }
+    // 评分量程归一（F41）：种子原按 10 分制灌入，归一为 5 分制（与用户 5 星评分一致）；仅当尚未产生真实用户评分时刷新，以保护用户打分不被覆盖。
+    const upr = db.prepare("UPDATE community SET rating_sum = ?, rating_count = ? WHERE id = ? AND author = '模法师官方' AND rating_count <= ?");
+    for (const s of COMMUNITY_SEED) { upr.run(s.ratingSum, s.ratingCount, s.id, s.ratingCount); }
     return m;
   }
   const stmt = db.prepare(
