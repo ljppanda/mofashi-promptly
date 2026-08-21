@@ -223,6 +223,13 @@ h1, h2, h3, h4,
 .community-stats { font-size: .82rem; color: var(--slate); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; }
 .community-stats b { color: var(--brand-700); }
 
+/* F40 信任徽章（对标 PromptMart 真实信任锚 · 东方墨韵浅色） */
+.cm-trust { display: flex; flex-wrap: wrap; gap: 6px; }
+.trust-badge { display: inline-flex; align-items: center; gap: 3px; font-size: .7rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid; line-height: 1.4; }
+.trust-ok { background: #ecf5ee; color: #2f7d56; border-color: #cfe8d8; }    /* 已认证·墨绿 */
+.trust-amber { background: #f7efdd; color: #8a6320; border-color: #ecd9b0; } /* 已测·描金 */
+.trust-rate { background: #fbf6ec; color: #b5362a; border-color: #eccec8; }  /* 评分·朱砂 */
+
 /* F36 社区量级背书条（社会证明 · 东方墨韵） */
 .cm-scale-bar {
   background: linear-gradient(180deg, #fbf6ec 0%, #f5eedd 100%);

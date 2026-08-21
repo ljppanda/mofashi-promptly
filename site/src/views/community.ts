@@ -519,7 +519,9 @@ export function communityCard(r: any, tab: string): string {
   const relTime = fmtRelative(r.publishedAt || r.createdAt);
   const isOfficial = r.author === "模法师官方";
   const authorHtml = r.authorId ? `<a href="#/u/${esc(r.authorId)}" class="author-link">${esc(r.author)}</a>` : esc(r.author);
-  const ratingStr = r.avgRating ? r.avgRating.toFixed(1) + (r.ratingCount ? ` (${r.ratingCount})` : "") : "—";
+  const ratingStr = r.avgRating ? `${r.avgRating.toFixed(1)} · ${r.ratingCount ?? 0} 人评分` : "—";
+  const recModels = (r.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).filter(Boolean).slice(0, 2);
+  const recBadge = recModels.length ? `<span class="trust-badge trust-amber">🎯 已测 ${esc(recModels.join("/"))}</span>` : "";
   const showTags = tab !== "home";
   const actions = tab === "mine"
     ? `<div class="flex gap-2 mt-2 flex-wrap items-center">
@@ -553,6 +555,7 @@ export function communityCard(r: any, tab: string): string {
   return `<div class="card tpl-card tpl-card--cover cm-card" data-id="${esc(r.id)}" style="cursor:pointer;overflow:hidden;">
     ${coverHtml}
     <div class="tpl-body">
+      ${recBadge ? `<div class="cm-trust">${recBadge}</div>` : ""}
       <div class="flex items-center justify-between" style="gap:8px;">
         <span class="pill ${isOfficial ? 'pill-official' : 'pill-community'}">${isOfficial ? '官方' : '社区'}</span>
         <span class="pill pill-diff diff-${r.difficulty === '专家' ? 3 : r.difficulty === '进阶' ? 2 : 1}">${esc(r.difficulty || '入门')}</span>
@@ -668,6 +671,14 @@ export async function communityDetail(id: string): Promise<void> {
     return;
   }
   const tagHtml = (row.tags || []).map((t: any) => `<span class="text-xs tag mr-1">#${esc(t)}</span>`).join("");
+  const isOfficialD = row.author === "模法师官方";
+  const recModelsD = (row.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).filter(Boolean).slice(0, 2);
+  const trustBits: string[] = [];
+  if (isOfficialD) trustBits.push("✓ 官方认证");
+  else if (row.authorId) trustBits.push("✓ 已认证作者");
+  if (recModelsD.length) trustBits.push("🎯 已测 " + recModelsD.join("/"));
+  if (row.avgRating) trustBits.push("★ " + row.avgRating + " · " + (row.ratingCount ?? 0) + " 人评分");
+  const trustRow2 = trustBits.length ? `<div class="cm-trust mt-2">${trustBits.map(p => `<span class="trust-badge ${p.startsWith("★") ? "trust-rate" : p.startsWith("🎯") ? "trust-amber" : "trust-ok"}">${esc(p)}</span>`).join("")}</div>` : "";
   ctx.appEl().innerHTML = `
     <a href="#/community" class="back-link" onclick="goBack();return false;">← 返回社区</a>
     <div class="mt-3">
@@ -676,7 +687,8 @@ export async function communityDetail(id: string): Promise<void> {
       ${row.cover ? `<img class="cm-cover" src="${esc(row.cover)}" alt="" style="margin-top:10px;border-radius:10px;max-height:240px;width:100%;object-fit:cover;" onerror="this.style.display='none'" />` : `<div class="cm-cover-ph" style="background:${industryPh(row.industry)};margin-top:10px;"><span>${esc((row.title || "?").slice(0, 1))}</span></div>`}
     </div>
     <div class="mt-2">${tagHtml}</div>
-    ${row.recommendModel ? `<p class="muted" style="margin-top:8px;font-size:.82rem;">🎯 适配：${esc(row.difficulty || '入门')}级 · 推荐 ${esc(row.recommendModel)}</p>` : ""}
+    ${row.difficulty ? `<p class="muted" style="margin-top:8px;font-size:.82rem;">🎯 适配：${esc(row.difficulty || '入门')}级</p>` : ""}
+    ${trustRow2}
     ${row.note ? `<p class="slate" style="margin-top:10px;line-height:1.6;">${esc(row.note)}</p>` : ""}
     <div class="card tpl-card" style="margin-top:16px;">
       <div id="cm-prompt-label" class="live-label" style="margin-bottom:6px;">📋 当前提示词</div>

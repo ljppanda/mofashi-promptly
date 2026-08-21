@@ -49,6 +49,14 @@ export function detail(slug: string): void {
     ? tpl.variables.length
     : ((tpl.prompt || "").match(/\{\{[^}]+\}\}/g) || []).length;
   const charCount = (tpl.prompt || "").length;
+  const recModels = (tpl.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).filter(Boolean).slice(0, 2);
+  const isOfficialT = tpl.author === "模法师官方";
+  const trustParts: string[] = [];
+  if (isOfficialT) trustParts.push("✓ 官方认证");
+  else if (tpl.authorId) trustParts.push("✓ 已认证作者");
+  if (recModels.length) trustParts.push("🎯 已测 " + recModels.join("/"));
+  if (tpl.avgRating) trustParts.push("★ " + tpl.avgRating + " · " + (tpl.ratingCount ?? 0) + " 人评分");
+  const trustRow = trustParts.length ? `<div class="cm-trust mt-2">${trustParts.map(p => `<span class="trust-badge ${p.startsWith("★") ? "trust-rate" : p.startsWith("🎯") ? "trust-amber" : "trust-ok"}">${esc(p)}</span>`).join("")}</div>` : "";
 
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
@@ -67,6 +75,7 @@ export function detail(slug: string): void {
     <p class="slate" style="margin-top:10px;line-height:1.6;">${esc(tpl.summary)}</p>
     <div class="mt-2">${tagHtml}</div>
     <div class="tpl-meta">📊 ${varCount} 个可填变量 · 骨架 ${charCount} 字 · 🔧 适配任意模型（F9 可跨模型对比）</div>
+    ${trustRow}
     ${tpl.sources && tpl.sources.length ? `<div class="gen-rag" style="margin-top:14px;"><div class="ttl">📚 该模板生成时参考了 ${tpl.sources.length} 个模板库范例</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${tpl.sources.map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s.title)}<span class="muted"> · ${esc(s.industry)}</span></span>`).join("")}</div></div>` : ""}
 
     <div class="card tpl-card" style="margin-top:18px;">
