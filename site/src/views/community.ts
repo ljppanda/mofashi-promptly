@@ -269,6 +269,15 @@ export async function community(): Promise<void> {
         <option value="favorites">收藏最多</option>
         <option value="uses">使用最多</option>
       </select>
+      <select id="cm-diff" class="select" style="width:auto;">
+        <option value="全部">全部难度</option>
+        <option value="入门">入门</option>
+        <option value="进阶">进阶</option>
+        <option value="专家">专家</option>
+      </select>
+      <select id="cm-model" class="select" style="width:auto;">
+        <option value="全部">全部模型</option>
+      </select>
     </div>
     <div id="cm-tags" class="cm-tagcloud mt-3"></div>
     <div id="cm-stats" class="community-stats mt-3"></div>
@@ -281,6 +290,8 @@ export async function community(): Promise<void> {
   if (_hs) { (window as any).__headerSearch = undefined; qEl.value = _hs; }
   const sortEl = (document.getElementById("cm-sort") as HTMLSelectElement);
   const industryEl = (document.getElementById("cm-industry") as HTMLSelectElement);
+  const diffEl = (document.getElementById("cm-diff") as HTMLSelectElement);
+  const modelEl = (document.getElementById("cm-model") as HTMLSelectElement);
   async function load() {
     const wrap = (document.getElementById("cm-wrap") as HTMLElement);
     if (!wrap) return;
@@ -296,24 +307,39 @@ export async function community(): Promise<void> {
           : '<p class="muted">社区广场还空空如也，去发布第一条吧！</p>';
         return;
       }
-      wrap.innerHTML = rows.map(r => communityCard(r, tab)).join("");
-      const industries = new Set(rows.map((r: any) => r.industry).filter(Boolean));
+      // 模板中心发现层（r21 #4）：动态填充「推荐模型」下拉（基于当前结果集去重），再按难度/模型前端过滤
+      const modelTokens: string[] = [];
+      (rows || []).forEach((r: any) => (r.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).filter(Boolean).forEach(m => { if (!modelTokens.includes(m)) modelTokens.push(m); }));
+      const curModel = modelEl.value;
+      modelEl.innerHTML = `<option value="全部">全部模型</option>` + modelTokens.map(m => `<option value="${esc(m)}"${m === curModel ? " selected" : ""}>${esc(m)}</option>`).join("");
+      let viewRows = rows;
+      if (diffEl && diffEl.value !== "全部") viewRows = viewRows.filter((r: any) => (r.difficulty || "入门") === diffEl.value);
+      if (modelEl && modelEl.value !== "全部") {
+        const mv = modelEl.value;
+        viewRows = viewRows.filter((r: any) => (r.recommendModel || "").split(/\s*\/\s*|\s*,\s*/).map((s: string) => s.trim()).includes(mv));
+      }
+      if (!viewRows.length) {
+        wrap.innerHTML = '<p class="muted">没有符合当前筛选条件的提示词，试试调整难度或模型筛选。</p>';
+        return;
+      }
+      wrap.innerHTML = viewRows.map(r => communityCard(r, tab)).join("");
+      const industries = new Set(viewRows.map((r: any) => r.industry).filter(Boolean));
       const statsEl = (document.getElementById("cm-stats") as HTMLElement);
       if (statsEl) {
         let extra = "";
         if (tab === "square" && summaryCache && summaryCache.todayPublished) extra = ` · ✨ 今日新增 <b>${summaryCache.todayPublished}</b> 条`;
-        statsEl.innerHTML = `📚 社区共 <b>${rows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业${extra} · 变量化模板，填一句目标即可生成`;
+        statsEl.innerHTML = `📚 社区共 <b>${viewRows.length}</b> 条提示词 · 覆盖 <b>${industries.size}</b> 个行业${extra} · 变量化模板，填一句目标即可生成`;
       }
       // 行业×数量聚合计数（report-2026-08-12 #5）：基于当前列表本地聚合，点击跳行业落地页
       const indMap: Record<string, number> = {};
-      rows.forEach((r: any) => { const k = r.industry || "其他"; indMap[k] = (indMap[k] || 0) + 1; });
+      viewRows.forEach((r: any) => { const k = r.industry || "其他"; indMap[k] = (indMap[k] || 0) + 1; });
       const indCounts: { industry: string; count: number }[] = Object.keys(indMap)
         .sort((a, b) => indMap[b] - indMap[a])
         .map(k => ({ industry: k, count: indMap[k] }));
       renderIndustryDist(document.getElementById("cm-ind-dist"), indCounts);
       // 标签云（提案③）：按当前列表标签出现频率排序，点击即按该标签过滤
       const tagCount: Record<string, number> = {};
-      (rows || []).forEach((r: any) => (r.tags || []).forEach((t: any) => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+      (viewRows || []).forEach((r: any) => (r.tags || []).forEach((t: any) => { tagCount[t] = (tagCount[t] || 0) + 1; }));
       const tagsArr = Object.entries(tagCount).sort((a: any, b: any) => b[1] - a[1]).slice(0, 20).map(([t, c]) => ({ t, c }));
       const tagEl = (document.getElementById("cm-tags") as HTMLElement);
       if (tagEl) {
@@ -413,6 +439,8 @@ export async function community(): Promise<void> {
   if (qEl) qEl.addEventListener("keydown", e => { if (e.key === "Enter") load(); });
   if (sortEl) sortEl.addEventListener("change", load);
   if (industryEl) industryEl.addEventListener("change", load);
+  if (diffEl) diffEl.addEventListener("change", load);
+  if (modelEl) modelEl.addEventListener("change", load);
   // 提案2：拉取聚合指标，到达后刷新广场以显示「今日新增 N 条」；F36 先渲染量级背书条
   loadSummary().then(s => { summaryCache = s; renderScaleBar(s); if (tab === "square") load(); });
   // 已有缓存时立即渲染背书条，避免空白等待
