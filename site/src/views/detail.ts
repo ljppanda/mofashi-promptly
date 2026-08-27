@@ -1,15 +1,14 @@
 // views/detail.ts — 模板详情页 + F2 代写流水线 + 测试沙盒 + 导入（Component 模式）。
+// 已裁剪为「个人本地」工具：去掉社区评分 / 发布 / 跨模型对比 / 作者主页，
+// 保留 F2 代写、本地收藏、版本历史、一键优化（F13/F39）、导入后增强与试跑。
 import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";
-import { esc, setMeta, fmtUsage, metricBump, metricRate, toast, diffLines, fmtDateTime } from "../core/ui.js";
+import { esc, setMeta, fmtUsage, metricBump, toast, diffLines, fmtDateTime } from "../core/ui.js";
 import { GEN_STEPS_3, ALL_INDUSTRIES, MAX_CLARIFY_ROUNDS } from "../core/config.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
-import { judgePromptText, PROMPT_DIM_LABELS, scoreTo100 } from "../core/judge.js";
 import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "./refine.js";
-import { openPublishForm } from "./community.js";
-import { openCompareModal } from "./compare.js";
 import { openOptimizeModal } from "./optimize.js";
 import { openPreviewModal } from "./preview.js";
 
@@ -44,7 +43,7 @@ export function detail(slug: string): void {
   const dimsHtml = (tpl.variables && tpl.variables.length)
     ? tpl.variables.map(v => `<span class="tag">${esc(v.label)}</span>`).join("")
     : '<span class="muted">通用专家提示词（角色 + 结构由模板固定）</span>';
-  // 结构化元信息（报告#5）：变量数优先取变量表，否则按 {{占位}} 计数；字数取骨架字符数
+  // 结构化元信息：变量数优先取变量表，否则按 {{占位}} 计数；字数取骨架字符数
   const varCount = (tpl.variables && tpl.variables.length)
     ? tpl.variables.length
     : ((tpl.prompt || "").match(/\{\{[^}]+\}\}/g) || []).length;
@@ -55,8 +54,7 @@ export function detail(slug: string): void {
   if (isOfficialT) trustParts.push("✓ 官方认证");
   else if (tpl.authorId) trustParts.push("✓ 已认证作者");
   if (recModels.length) trustParts.push("🎯 已测 " + recModels.join("/"));
-  if (tpl.avgRating) trustParts.push("★ " + tpl.avgRating + "/5 · " + (tpl.ratingCount ?? 0) + " 人评分");
-  const trustRow = trustParts.length ? `<div class="cm-trust mt-2">${trustParts.map(p => `<span class="trust-badge ${p.startsWith("★") ? "trust-rate" : p.startsWith("🎯") ? "trust-amber" : "trust-ok"}">${esc(p)}</span>`).join("")}</div>` : "";
+  const trustRow = trustParts.length ? `<div class="cm-trust mt-2">${trustParts.map(p => `<span class="trust-badge ${p.startsWith("🎯") ? "trust-amber" : "trust-ok"}">${esc(p)}</span>`).join("")}</div>` : "";
 
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
@@ -64,17 +62,18 @@ export function detail(slug: string): void {
       <h1 class="section-title" style="font-size:1.7rem;">${esc(tpl.title)}</h1>
       <div class="muted" style="font-size:.85rem;margin-top:6px;"><span id="meta-industry">${esc(tpl.industry)}</span> · ${esc(tpl.task)}
         ${tpl.generated ? '<span class="pill pill-amber" style="margin-left:4px;">AI 生成</span>' : ""}
-        ${tpl.forkedFrom ? `<a href="#/c/${esc(tpl.forkedFrom)}" class="pill" style="margin-left:4px;background:var(--brand-50);color:var(--brand-700);text-decoration:none;">🍴 派生自社区「${esc(tpl.forkedFromTitle || "社区模板")}」</a>` : ""}</div>
+        ${tpl.imported ? '<span class="pill pill-green" style="margin-left:4px;">导入</span>' : ""}
+        ${tpl.forkedFrom ? `<a href="#/t/${esc(tpl.forkedFrom)}" class="pill" style="margin-left:4px;background:var(--brand-50);color:var(--brand-700);text-decoration:none;">🍴 派生自「${esc(tpl.forkedFromTitle || "模板")}」</a>` : ""}</div>
       ${ctx.current._genUsage ? `<div class="mt-2 inline-flex items-center gap-1 text-xs" style="color:var(--slate);background:var(--bg-soft);padding:4px 10px;border-radius:8px;">📊 模板生成：${esc(fmtUsage(ctx.current._genUsage, ctx.current._genElapsed || 0))}</div>` : ""}
     </div>
     <div class="flex flex-wrap items-center gap-2 mt-3">
       <label class="text-sm font-medium" style="color:var(--slate)">所属分类</label>
       <select id="set-industry" class="select" style="width:auto;padding:7px 12px;">${industryOpts}</select>
-      ${tpl.generated ? '<span class="text-xs muted">AI 生成模板可在此改到任意分类</span>' : ""}
+      ${tpl.generated || tpl.imported ? '<span class="text-xs muted">生成 / 导入的模板可在此改到任意分类</span>' : ""}
     </div>
     <p class="slate" style="margin-top:10px;line-height:1.6;">${esc(tpl.summary)}</p>
     <div class="mt-2">${tagHtml}</div>
-    <div class="tpl-meta">📊 ${varCount} 个可填变量 · 骨架 ${charCount} 字 · 🔧 适配任意模型（F9 可跨模型对比）</div>
+    <div class="tpl-meta">📊 ${varCount} 个可填变量 · 骨架 ${charCount} 字 · 🔧 适配任意模型</div>
     ${trustRow}
     ${tpl.sources && tpl.sources.length ? `<div class="gen-rag" style="margin-top:14px;"><div class="ttl">📚 该模板生成时参考了 ${tpl.sources.length} 个模板库范例</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${tpl.sources.map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s.title)}<span class="muted"> · ${esc(s.industry)}</span></span>`).join("")}</div></div>` : ""}
 
@@ -101,20 +100,11 @@ export function detail(slug: string): void {
         <div class="flex gap-2 mt-3 flex-wrap items-center">
           <button id="ed-save" class="btn btn-primary btn-sm">💾 保存修改</button>
           <button id="ed-cancel" class="btn btn-ghost btn-sm">取消</button>
-          <button id="ed-score" class="btn btn-ghost btn-sm">⚖️ 评一下骨架</button>
           <button id="ed-enhance" class="btn btn-ghost btn-sm">✨ 增强</button>
           <span id="ed-msg" class="muted" style="font-size:.75rem;"></span>
         </div>
       </div>
       <div class="muted" style="font-size:.78rem;margin-top:6px;">↑ 这是「可复用的模板骨架」（含 {{占位变量}}），本身不能直接发给 AI。在下方填入你的具体目标，即可把它填成一份可直接用的成品提示词。</div>
-    </div>
-
-    <div class="card tpl-card" style="margin-top:16px;">
-      <div class="ttl">⭐ 给这个模板评分</div>
-      <div id="rate-stars" class="rate-stars">
-        ${[1,2,3,4,5].map(n => `<span class="star" data-n="${n}">★</span>`).join("")}
-      </div>
-      <div id="rate-info" class="muted" style="font-size:.78rem;margin-top:6px;">加载评分中…</div>
     </div>
 
     <div class="card tpl-card" style="margin-top:16px;">
@@ -140,8 +130,6 @@ export function detail(slug: string): void {
         <button id="use-copy" class="btn btn-ghost btn-sm">复制提示词</button>
         <button id="use-dl-md" class="btn btn-ghost btn-sm">下载 .md</button>
         <button id="use-dl-txt" class="btn btn-ghost btn-sm">下载 .txt</button>
-        <button id="use-publish" class="btn btn-ghost btn-sm">📣 发布到社区</button>
-        <button id="use-score" class="btn btn-ghost btn-sm">⚖️ 评一下</button>
         <span id="use-usage" class="muted" style="font-size:.75rem;"></span>
       </div>
     </div>
@@ -150,7 +138,6 @@ export function detail(slug: string): void {
         <div class="ttl">🧪 测试这个提示词（把它当作系统设定，自由提问，多轮对话）</div>
         <div class="flex gap-2 items-center">
           <button id="refine-open" class="btn btn-ghost btn-sm">✏️ 不满意？让 AI 改进</button>
-          <button id="use-compare" class="btn btn-ghost btn-sm">🔬 跨模型对比</button>
           <button id="test-clear" class="btn btn-ghost btn-sm">清空对话</button>
         </div>
       </div>
@@ -193,16 +180,6 @@ export function detail(slug: string): void {
   (document.getElementById("use-dl-txt") as HTMLButtonElement).addEventListener("click", () => downloadUsePrompt("txt"));
   const runBtn = (document.getElementById("use-run") as HTMLButtonElement);
   if (runBtn) runBtn.addEventListener("click", handleTestChat);
-  const publishBtn = (document.getElementById("use-publish") as HTMLButtonElement);
-  if (publishBtn) publishBtn.addEventListener("click", () => {
-    openPublishForm({
-      title: tpl.title,
-      industry: ctx.current.industry || tpl.industry,
-      tags: tpl.tags || [],
-      prompt: ctx.current._lastPrompt || tpl.prompt,
-      note: tpl.summary || "",
-    });
-  });
   const runStop = (document.getElementById("use-run-stop") as HTMLButtonElement);
   if (runStop) runStop.addEventListener("click", () => { if (ctx.testController) ctx.testController.abort(); });
   const testSend = (document.getElementById("test-send") as HTMLButtonElement);
@@ -234,13 +211,6 @@ export function detail(slug: string): void {
     });
   }
 
-  // 评分：星星点选 + 拉取当前评分
-  const stars = (document.getElementById("rate-stars") as HTMLElement);
-  if (stars) {
-    stars.querySelectorAll(".star").forEach(s => s.addEventListener("click", () => {
-      rateTemplate(Number(s.getAttribute("data-n")));
-    }));
-  }
   if (canEdit) {
     const editToggle = (document.getElementById("edit-toggle") as HTMLButtonElement);
     if (editToggle) editToggle.addEventListener("click", () => {
@@ -272,12 +242,7 @@ export function detail(slug: string): void {
     if (histBtn) histBtn.addEventListener("click", openHistory);
     const optBtn = (document.getElementById("opt-btn") as HTMLButtonElement);
     if (optBtn) optBtn.addEventListener("click", () => openOptimizeModal(ctx.current));
-    const edScore = (document.getElementById("ed-score") as HTMLButtonElement);
-    if (edScore) edScore.addEventListener("click", () => {
-      const p = (document.getElementById("ed-prompt") as HTMLTextAreaElement).value;
-      scoreCurrentPrompt(p, { title: ctx.current.title });
-    });
-    // r19#7：编辑态「✨ 增强」——复用 F13 优化闭环，优化版写回编辑框并落 F10 版本（before/after 可回滚）
+    // 编辑态「✨ 增强」——复用 F13 优化闭环，优化版写回编辑框并落 F10 版本（before/after 可回滚）
     const edEnhance = (document.getElementById("ed-enhance") as HTMLButtonElement);
     if (edEnhance) edEnhance.addEventListener("click", () => {
       const tempTpl = {
@@ -305,122 +270,6 @@ export function detail(slug: string): void {
   // 「示例预览」对所有模板开放：内置模板虽不可编辑，也应能一键生成示例看效果
   const prevBtn = (document.getElementById("prev-btn") as HTMLButtonElement);
   if (prevBtn) prevBtn.addEventListener("click", () => openPreviewModal(ctx.current));
-  const compareBtn = (document.getElementById("use-compare") as HTMLButtonElement);
-  if (compareBtn) compareBtn.addEventListener("click", () => {
-    if (!ctx.current._lastPrompt) { toast("请先生成成品提示词，再对比不同模型的表现。"); return; }
-    openCompareModal(ctx.current._lastPrompt, "请用 3 句话介绍你能帮我做什么，并各举一例。");
-  });
-
-  const scoreBtn = (document.getElementById("use-score") as HTMLButtonElement);
-  if (scoreBtn) scoreBtn.addEventListener("click", () => {
-    scoreCurrentPrompt(ctx.current._lastPrompt || "", { title: tpl.title });
-  });
-
-  loadRateInfo(tplId(ctx.current));
-}
-
-// 发送前实时评分：调用 judgePromptText，含无 Key 提示与 loading 态。
-async function scoreCurrentPrompt(promptText: string, meta: { title?: string; goal?: string }): Promise<void> {
-  const text = (promptText || "").trim();
-  if (!text) { toast("还没有可评分的提示词，先生成或编辑出一份吧"); return; }
-  openScoreModal(null); // loading
-  try {
-    const r = await judgePromptText(text, meta);
-    openScoreModal(r, meta);
-  } catch (e: any) {
-    const msg = e && e.message ? e.message : String(e);
-    if (/未配置 API Key|未填写 API Key/.test(msg)) {
-      openScoreModal({ error: "请先到「设置」页填写 API Key，才能使用实时评分。" });
-    } else {
-      openScoreModal({ error: "评分失败：" + msg });
-    }
-  }
-}
-
-// 评分弹层：result 为 null→loading；{error}→错误；JudgeResult→打分结果。
-function openScoreModal(result: any, meta: { title?: string } = {}): void {
-  const old = document.getElementById("score-modal");
-  if (old) old.remove();
-  const overlay = document.createElement("div");
-  overlay.id = "score-modal";
-  overlay.className = "score-modal";
-  let body = "";
-  if (!result) {
-    body = `<div class="score-loading">⚖️ 裁判模型评分中…</div>`;
-  } else if (result.error) {
-    body = `<div class="score-error">${esc(result.error)}</div>`;
-  } else if (!result.available) {
-    body = `<div class="score-error">评分解析失败，请重试。</div>`;
-  } else {
-    const score = scoreTo100(result.total);
-    const bars = PROMPT_DIM_LABELS.map(([k, label]) => {
-      const v = (result.dims && result.dims[k]) || 0;
-      const pct = Math.max(0, Math.min(100, (v / 5) * 100));
-      const low = v < 3;
-      return `<div class="score-bar-row">
-        <span class="score-bar-label">${label}</span>
-        <span class="score-bar"><span class="score-bar-fill${low ? " low" : ""}" style="width:${pct}%"></span></span>
-        <span class="score-bar-val">${v}/5</span>
-      </div>`;
-    }).join("");
-    const kind = score >= 80 ? "优" : score >= 60 ? "良" : score >= 40 ? "中" : "待改进";
-    body = `
-      <div class="score-head">
-        <div class="score-num">${score}<span class="score-num-unit">/100</span></div>
-        <div class="score-kind">${kind}</div>
-      </div>
-      <div class="score-bars">${bars}</div>
-      <div class="score-note">💡 ${esc(result.note || "（无建议）")}</div>`;
-  }
-  overlay.innerHTML = `
-    <div class="score-card">
-      <div class="score-card-ttl">⚖️ 提示词质量评分${meta.title ? `<span class="score-card-sub">${esc(meta.title)}</span>` : ""}</div>
-      ${body}
-      <div class="score-foot"><button id="score-close" class="btn btn-primary btn-sm">知道了</button></div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  const close = document.getElementById("score-close");
-  if (close) close.addEventListener("click", () => overlay.remove());
-}
-
-// 高亮用户已选/将选的星数
-function highlightStars(n: number): void {
-  const stars = (document.getElementById("rate-stars") as HTMLElement);
-  if (!stars) return;
-  stars.querySelectorAll(".star").forEach(s => {
-    s.classList.toggle("on", Number(s.getAttribute("data-n")) <= n);
-  });
-}
-
-// 提交评分（带本人上次评分做差值，避免重复计数）
-function rateTemplate(score: number): void {
-  const id = tplId(ctx.current);
-  if (!id) return;
-  const prev = Store.getRating(id);
-  metricRate(id, score, prev, ctx.current.title, ctx.current.industry);
-  Store.setRating(id, score);
-  highlightStars(score);
-  loadRateInfo(id);
-  const m = (document.getElementById("msg") as HTMLElement);
-  if (m) { m.textContent = "已评分 " + score + " 星 ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2000); }
-}
-
-// 拉取并展示该模板的累计评分（均分 + 人数）
-async function loadRateInfo(id: string): Promise<void> {
-  const info = (document.getElementById("rate-info") as HTMLElement);
-  if (!info || !id) return;
-  highlightStars(Store.getRating(id) || 0);
-  try {
-    const r = await fetch("/metrics?id=" + encodeURIComponent(id));
-    if (!r.ok) { info.textContent = "（暂无评分）"; return; }
-    const e = await r.json();
-    const avg = e.avgRating != null ? e.avgRating : 0;
-    const my = Store.getRating(id);
-    info.textContent = `当前均分 ${avg}/5 · ${e.ratingCount || 0} 人评分` + (my ? ` · 你给了 ${my} 星` : "");
-  } catch {
-    info.textContent = "（评分加载失败）";
-  }
 }
 
 // 把"原始目标 + 已确认问答"拼成完整 brief（模型不可用时兜底）
@@ -814,29 +663,21 @@ function downloadTemplate(): void {
   if (m) { m.textContent = "已下载模板 JSON ✓"; setTimeout(() => { if (m) m.textContent = ""; }, 2500); }
 }
 
+// 收藏到「我的模板」：纯本地存储（个人工具，无登录/云端概念）。
 function toggleSave(): void {
   const id = tplId(ctx.current);
-  const doSave = () => {
-    if (Store.hasMine(ctx.current.slug)) {
-      Store.removeMine(ctx.current.slug);
-      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "☆ 收藏到我的模板";
-      metricBump(id, "favorite", -1, ctx.current.title, ctx.current.industry);
-    } else {
-      Store.addMine(ctx.current);
-      (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
-      metricBump(id, "favorite", 1, ctx.current.title, ctx.current.industry);
-    }
-  };
-  // 收藏需登录：未登录收藏只存本机、换设备即丢，不符合「我的专属模板」预期。
-  if (!window.Auth || !window.Auth.isAuthed()) {
-    const m = (document.getElementById("msg") as HTMLElement);
-    if (m) { m.textContent = "收藏需要先登录，登录后才会存入你的专属模板库。"; setTimeout(() => { if (m) m.textContent = ""; }, 3000); }
-    if (window.Auth && window.Auth.ensure) {
-      window.Auth.ensure().then((tok) => { if (tok) { doSave(); toast("✓ 已登录并收藏"); } });
-    }
-    return;
+  if (!id) return;
+  if (Store.hasMine(ctx.current.slug)) {
+    Store.removeMine(ctx.current.slug);
+    (document.getElementById("save-btn") as HTMLButtonElement).textContent = "☆ 收藏到我的模板";
+    metricBump(id, "favorite", -1, ctx.current.title, ctx.current.industry);
+    toast("已取消收藏");
+  } else {
+    Store.addMine(ctx.current);
+    (document.getElementById("save-btn") as HTMLButtonElement).textContent = "★ 已收藏";
+    metricBump(id, "favorite", 1, ctx.current.title, ctx.current.industry);
+    toast("✓ 已收藏到「我的模板」（仅存本机浏览器）");
   }
-  doSave();
 }
 
 function openHistory(): void {

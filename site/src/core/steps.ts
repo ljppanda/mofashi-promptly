@@ -10,9 +10,9 @@ export function renderRagRefs(refs: any[]): void {
   if (!el) return;
   if (!refs || !refs.length) { el.style.display = "none"; el.innerHTML = ""; return; }
   el.style.display = "block";
-  el.innerHTML = `<div class="ttl">🔎 已从模板库与社区广场检索到 ${refs.length} 个相似范例作为参考</div>` +
+  el.innerHTML = `<div class="ttl">🔎 已从模板库检索到 ${refs.length} 个相似范例作为参考</div>` +
     `<div style="display:flex;flex-wrap:wrap;gap:6px;">` +
-    refs.map((r) => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${r.source === "community" ? '<b style="color:#16a34a">社区</b> · ' : ""}${esc(r.title)}<span class="muted"> · ${esc(r.industry)}</span></span>`).join("") +
+    refs.map((r) => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(r.title)}<span class="muted"> · ${esc(r.industry)}</span></span>`).join("") +
     `</div>`;
 }
 

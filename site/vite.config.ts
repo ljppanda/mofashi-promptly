@@ -15,15 +15,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    // 开发模式下把 API / Agent / 社区 / 可观测 等请求代理到 Node 后端（默认 8000），
+    // 开发模式下把 API / Agent / relay 等请求代理到 Node 后端（默认 8000），
     // 避免浏览器跨域，无需后端单独配 CORS 即可联调。
     proxy: {
       "/api": "http://localhost:8000",
       "/agent": "http://localhost:8000",
       "/relay": "http://localhost:8000",
-      "/community": "http://localhost:8000",
-      "/metrics": "http://localhost:8000",
-      "/traces": "http://localhost:8000",
       "/healthz": "http://localhost:8000",
     },
   },

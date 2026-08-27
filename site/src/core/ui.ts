@@ -20,15 +20,14 @@ export function fmtUsage(u: any, ms: number): string {
   return p.join(" · ");
 }
 
-// 热度指标上报（fire-and-forget，失败静默）
+// 热度指标上报（原后端 /metrics 端点已随社区能力一并移除，这里降级为无操作，
+// 保留函数签名，避免改动调用方——本地个人工具不再上报任何远程指标）。
 export function metricBump(id: string, type: string, delta: number, title: string, industry: string): void {
-  if (!id) return;
-  fetch("/metrics/bump", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, type, delta, title, industry }) }).catch(() => {});
+  /* no-op: 本地个人工具不收集使用指标 */
 }
 
 export function metricRate(id: string, score: number, prev: number, title: string, industry: string): void {
-  if (!id) return;
-  fetch("/metrics/rate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, score, prev: prev || 0, title, industry }) }).catch(() => {});
+  /* no-op: 本地个人工具不收集评分指标 */
 }
 
 // 轻量 toast 提示（duration 默认 2800ms，可按需延长，例如分享复制场景给足粘贴时间）

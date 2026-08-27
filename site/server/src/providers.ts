@@ -3,8 +3,7 @@
 // 仅实现流式 chat（Agent 只需要生成），并统一归一化 usage。
 // 设计：绝大多数为 OpenAI 兼容；Claude / Gemini / 文心 走各自原生协议。
 
-import { LS_ENABLED, lsStart, lsEnd } from "./langsmith.js";
-import { recordProviderAttempt, recordFailover } from "./opmetrics.js";
+import { recordProviderAttempt, recordFailover, LS_ENABLED, lsStart, lsEnd } from "./langsmith.js";
 
 export type Style = "openai" | "claude" | "gemini" | "ernie";
 
@@ -335,13 +334,10 @@ export function resolveFallbacks(): FallbackSpec[] {
   });
 }
 
-// 单次模型调用（不含重试/主备，不含指标）：保留原 chatStream 的超时 + LangSmith + 协议分发逻辑。
+// 单次模型调用（不含重试/主备，不含指标）：超时 + 协议分发。本地个人工具不接 LangSmith/运营指标。
 async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
   const p = providerOf(opts.provider);
   const t0 = Date.now();
-  const childId = (LS_ENABLED && opts.lsParentRunId)
-    ? await lsStart(`${p.label}·${opts.model}`, "llm", { provider: opts.provider, model: opts.model }, opts.lsParentRunId, { model: opts.model })
-    : null;
   const ctrl = new AbortController();
   const TIMEOUT_MS = 90_000;
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -359,14 +355,10 @@ async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
       case "ernie": res = await streamErnie(p, opts.model ?? "ernie-4.0-8k", opts.apiKey, opts.apiSecret ?? "", withTimeout); break;
       default: throw new Error("未支持的 style: " + p.style);
     }
-  } catch (err) {
-    await lsEnd(childId, { error: String((err as any)?.message || err) });
-    throw err;
   } finally {
     clearTimeout(timer);
   }
   res.elapsedMs = Date.now() - t0;
-  await lsEnd(childId, { outputs: { text: res.text, usage: res.usage }, metadata: { elapsedMs: res.elapsedMs } });
   return res;
 }
 

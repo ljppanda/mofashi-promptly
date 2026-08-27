@@ -164,27 +164,3 @@ export function templateRefineCtx(): any {
     msgId: "msg",
   };
 }
-
-// 社区详情页的 refine 上下文
-export function communityRefineCtx(): any {
-  return {
-    getPrompt: () => ctx.cCurrentPrompt,
-    setPrompt: (p: string) => { ctx.cCurrentPrompt = p; },
-    getTestMessages: () => ctx.cState.msgs,
-    setTestMessages: (m: any[]) => { ctx.cState.msgs = m; },
-    resetController: () => { ctx.cState.ctl = null; },
-    testLogId: "cm-test-log",
-    promptCardId: "cm-prompt-body",
-    promptLabelId: "cm-prompt-label",
-    testPromptId: null,
-    usageId: "cm-test-usage",
-    stepsId: "cm-refine-steps",
-    resultId: "cm-refine-result",
-    liveId: "cm-refine-live",
-    boxId: "cm-refine-box",
-    feedbackId: "cm-refine-feedback",
-    goId: "cm-refine-go",
-    cancelId: "cm-refine-cancel",
-    msgId: "cm-msg",
-  };
-}

@@ -3,8 +3,6 @@ export const Store = (function () {
   const K_SETTINGS = "ppt_settings";
   const K_MINE = "ppt_my_templates";
   const K_DRAFTS = "ppt_drafts";   // AI 生成 / 导入的草稿：持久化，刷新不丢
-  const K_RATINGS = "ppt_ratings"; // 本人对各模板的评分（slug -> 1-5），用于“改评”差值计算
-  const K_COMM_FAVS = "ppt_community_favs"; // 社区收藏（id -> true）
 
   function getSettings() {
     try { return JSON.parse(localStorage.getItem(K_SETTINGS)) || {}; }
@@ -79,34 +77,6 @@ export const Store = (function () {
     return getMine().find(x => x.slug === slug) || getDrafts().find(x => x.slug === slug) || null;
   }
 
-  function getRatings() {
-    try { return JSON.parse(localStorage.getItem(K_RATINGS)) || {}; }
-    catch (e) { return {}; }
-  }
-  function getRating(slug) {
-    const r = getRatings();
-    return r[slug] || 0;
-  }
-  function setRating(slug, score) {
-    const r = getRatings();
-    r[slug] = score;
-    localStorage.setItem(K_RATINGS, JSON.stringify(r));
-  }
-
-  function getCommunityFavs() {
-    try { return JSON.parse(localStorage.getItem(K_COMM_FAVS)) || {}; }
-    catch (e) { return {}; }
-  }
-  function hasCommunityFav(id) {
-    return !!getCommunityFavs()[id];
-  }
-  function setCommunityFav(id, on) {
-    const f = getCommunityFavs();
-    if (on) f[id] = true; else delete f[id];
-    localStorage.setItem(K_COMM_FAVS, JSON.stringify(f));
-  }
-
   return { getSettings, saveSettings, getMine, addMine, removeMine, hasMine,
-           getDrafts, saveDraft, removeDraft, hasDraft, findAny,
-           getRating, setRating, hasCommunityFav, setCommunityFav };
+           getDrafts, saveDraft, removeDraft, hasDraft, findAny };
 })();

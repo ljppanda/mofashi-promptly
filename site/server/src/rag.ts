@@ -22,8 +22,6 @@ import {
   type VectorStoreQueryResult,
 } from "llamaindex";
 import { DynamicTool } from "@langchain/core/tools";
-import { listCommunity } from "./db.js";
-import { recordRag } from "./opmetrics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CORPUS = path.resolve(__dirname, "..", "data", "templates.json");
@@ -221,42 +219,16 @@ interface CorpusItem {
   quality?: number; // 0~1 质量分：仅社区模板有（来自评分），内置种子为 0（中性）
 }
 
-// 把社区「已发布」模板也纳入检索池（软审核后公开 = 已通过基础质量门槛）。
-// slug 加 cm_ 前缀避免与内置种子 slug 冲突；text 用于向量化、prompt 用于 few-shot 展示。
-// quality：有评分则取平均星级归一化（avg/5），无评分记 0（中性，不被埋没也不被加权）。
-function publishedCommunityItems(): CorpusItem[] {
-  try {
-    const rows = listCommunity({ status: "published", limit: 1000, sort: "heat" });
-    return rows.map((r) => {
-      const avg = r.ratingCount > 0 ? r.ratingSum / r.ratingCount : 0;
-      const quality = r.ratingCount > 0 ? Math.min(1, Math.max(0, avg / 5)) : 0;
-      return {
-        slug: "cm_" + r.id,
-        title: r.title || "社区模板",
-        industry: r.industry || "其他",
-        task: r.note || "",
-        text: [r.title, r.industry, (r.tags || []).join(" "), r.prompt].filter(Boolean).join(" "),
-        prompt: r.prompt || "",
-        source: "community" as const,
-        quality,
-      };
-    });
-  } catch (e) {
-    console.error("[rag] 读取社区模板失败，仅用内置语料：", e);
-    return [];
-  }
-}
-
+// 检索语料 = 内置种子模板（个人本地工具，无社区发布内容）。
 function loadCorpus(): CorpusItem[] {
   const raw = fs.readFileSync(CORPUS, "utf8");
   const seed = JSON.parse(raw) as CorpusItem[];
-  const merged = [...seed, ...publishedCommunityItems()];
-  const N = merged.length || 1;
+  const N = seed.length || 1;
   const df = new Map<string, number>();
-  for (const c of merged) for (const g of ngrams(c.text)) df.set(g, (df.get(g) || 0) + 1);
+  for (const c of seed) for (const g of ngrams(c.text)) df.set(g, (df.get(g) || 0) + 1);
   IDF = new Map();
   for (const [g, d] of df) IDF.set(g, Math.log((N + 1) / (d + 1)) + 1); // 平滑 IDF
-  return merged;
+  return seed;
 }
 
 function dot(a: number[] | Float32Array, b: number[] | Float32Array): number {
@@ -370,8 +342,7 @@ let indexPromise: Promise<VectorStoreIndex> | null = null;
 let currentStore: LanceDBVectorStore | null = null; // 供 retrieve 直接做向量查询 + 加权重排
 let builtSig: string | null = null; // 已构建集合的签名
 let pendingSig: string | null = null; // 正在构建集合的签名（防并发双建）
-const COMMUNITY_SIG_TTL = 15000; // 社区集合签名缓存 15s，降低 DB 查询频次
-const QUALITY_WEIGHT = 0.2; // 质量加权系数：blended = 相似度 + QUALITY_WEIGHT * 质量(0~1)。可调。
+const QUALITY_WEIGHT = 0.2; // 质量加权系数：blended = 相似度 + QUALITY_WEIGHT * 质量(0~1)。内置种子质量均为 0。
 
 // 内置语料签名：文件大小 + mtime（内容改了才会变）
 function seedSig(): string {
@@ -383,24 +354,8 @@ function seedSig(): string {
   }
 }
 
-// 社区集合签名：已发布模板的 id+title。带短 TTL 缓存。
-let lastCommSig = "";
-let lastCommSigAt = 0;
-function communitySignature(): string {
-  const now = Date.now();
-  if (lastCommSig && now - lastCommSigAt < COMMUNITY_SIG_TTL) return lastCommSig;
-  try {
-    const rows = listCommunity({ status: "published", limit: 1000 });
-    lastCommSig = rows.map((r) => `${r.id}:${r.title}`).join("|");
-  } catch {
-    /* 读取失败则沿用旧签名 */
-  }
-  lastCommSigAt = now;
-  return lastCommSig;
-}
-
 function desiredSig(): string {
-  return `${seedSig()}#${communitySignature()}`;
+  return seedSig();
 }
 
 async function buildIndex(): Promise<VectorStoreIndex> {
@@ -418,8 +373,6 @@ export function invalidateRagIndex(): void {
   indexPromise = null;
   builtSig = null;
   pendingSig = null;
-  lastCommSig = "";
-  lastCommSigAt = 0;
 }
 
 // 启动预热：在服务启动阶段主动构建一次索引，避免首条检索请求的冷启动延迟。
@@ -531,20 +484,17 @@ export async function retrieve(
     const blocks = ranked.map((r, i) => {
       const snip = (r.prompt || "").replace(/\s+/g, " ").slice(0, 280);
       snippet[r.slug] = snip;
-      const tag = r.source === "community" ? "·社区" : "";
-      return `范例${i + 1}【${r.title}｜${r.industry}${tag}】\n${snip}`;
+      return `范例${i + 1}【${r.title}｜${r.industry}】\n${snip}`;
     });
     const context = ranked.length
-      ? "下面是模板库（内置范例 + 社区广场已发布模板" +
+      ? "下面是模板库（内置范例" +
         (semanticReady ? "，已启用语义+词法混合召回" : "") +
         "）中高质量范例，借鉴其「角色 + 上下文/背景 + 任务与约束 + 输出格式」四段式，但不要照抄：\n\n" +
         blocks.join("\n\n")
       : "";
-    recordRag(1, refs.length > 0 ? 1 : 0); // 运营指标：检索命中率
     return { context, refs, snippet };
   } catch (e) {
     console.error("[rag] retrieve 失败，回退空上下文：", e);
-    recordRag(1, 0);
     return empty;
   }
 }
