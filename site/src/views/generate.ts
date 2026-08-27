@@ -58,8 +58,9 @@ export async function handleGenerate(): Promise<void> {
       res = await LLM.generateViaAgent(industry, sentence, onGenToken, onNode, ctx.genController.signal, onContext, onThink);
     } catch (e) {
       const m = (e && (e as any).message) || "";
+      console.error("[generateViaAgent failed]", e);
       if (/API 错误|401|Authentication|api ?key|invalid|key/i.test(m)) throw e;
-      live.textContent += "\n（服务端 Agent 暂不可用，已自动改用浏览器直连生成）";
+      live.textContent += "\n（服务端 Agent 暂不可用" + (m ? "：" + m : "") + "，已自动改用浏览器直连生成）";
       renderGenSteps("draft", GEN_STEPS_5);
       appendThink("已切换浏览器直连，正在调用模型生成模板（此模式下不展示中间思考）…");
       res = await LLM.generateTemplate(industry, sentence, onGenToken, ctx.genController.signal);
@@ -76,6 +77,7 @@ export async function handleGenerate(): Promise<void> {
     Store.saveDraft(res.tpl); // 持久化草稿，刷新后仍可找回
     // 不再自动跳转：保留状态机流程可见，由用户点「查看生成的模板」进入详情
     msg.textContent = "✓ 已生成模板：「" + (res.tpl.title || "未命名") + "」";
+    (window as any).__pendingGoal = sentence; // 携带本次需求，供详情页「前往生成」自动填入目标
     openBtn.href = "#/t/" + res.tpl.slug;
     openBtn.style.display = "inline-flex";
     // 上方可能还有一大段生成过程输出，自动把「去生成提示词」入口滚进视野，避免找不到

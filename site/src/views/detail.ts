@@ -40,9 +40,33 @@ export function detail(slug: string): void {
   const industryOpts = ALL_INDUSTRIES.map(i =>
     `<option value="${esc(i)}" ${i === tpl.industry ? "selected" : ""}>${esc(i)}</option>`
   ).join("");
+  // 变量类型 → 中文小标签（只读展示；未知类型回退为原值，且一律经 esc 转义）
+  const typeLabel = (t: string | undefined): string => {
+    const map: Record<string, string> = { text: "文本", textarea: "多行文本", select: "单选", multiselect: "多选" };
+    const raw = (t || "").trim();
+    return map[raw] || (raw ? esc(raw) : "文本");
+  };
   const dimsHtml = (tpl.variables && tpl.variables.length)
     ? tpl.variables.map(v => `<span class="tag">${esc(v.label)}</span>`).join("")
     : '<span class="muted">通用专家提示词（角色 + 结构由模板固定）</span>';
+  // 每个变量的完整定义列表（只读展示：label + 必填标记 + 类型徽标 + 字段名 / 选项 / 示例）
+  const varsDetailHtml = (tpl.variables && tpl.variables.length)
+    ? `<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px;">` +
+      tpl.variables.map(v => {
+        const label = esc(String(v.label || v.name || ""));
+        const reqStar = v.required ? ' <span style="color:#d33;font-weight:700;">*</span>' : "";
+        const typeBadge = `<span class="pill" style="margin-left:6px;padding:1px 8px;font-size:.7rem;">${typeLabel(String(v.type))}</span>`;
+        const optsPart = (v.options && v.options.length)
+          ? `｜选项：${v.options.map((o: any) => esc(String(o))).join("、")}`
+          : "";
+        const phPart = v.placeholder ? `｜示例：${esc(String(v.placeholder))}` : "";
+        return `<div style="background:#faf6ec;border:1px solid var(--brand-100);border-radius:8px;padding:8px 10px;">
+          <div style="font-weight:600;">${label}${reqStar}${typeBadge}</div>
+          <div class="muted" style="font-size:.78rem;margin-top:2px;">字段名 ${esc(String(v.name))}${optsPart}${phPart}</div>
+        </div>`;
+      }).join("") +
+      `</div>`
+    : "";
   // 结构化元信息：变量数优先取变量表，否则按 {{占位}} 计数；字数取骨架字符数
   const varCount = (tpl.variables && tpl.variables.length)
     ? tpl.variables.length
@@ -78,8 +102,9 @@ export function detail(slug: string): void {
     ${tpl.sources && tpl.sources.length ? `<div class="gen-rag" style="margin-top:14px;"><div class="ttl">📚 该模板生成时参考了 ${tpl.sources.length} 个模板库范例</div><div style="display:flex;flex-wrap:wrap;gap:6px;">${tpl.sources.map(s => `<span class="tag" style="background:#fff;border:1px solid var(--brand-100);">${esc(s.title)}<span class="muted"> · ${esc(s.industry)}</span></span>`).join("")}</div></div>` : ""}
 
     <div class="card tpl-card" style="margin-top:18px;">
-      <div class="ttl">🧩 这个模板会自动帮你覆盖（由 AI 在生成时动态写具体）</div>
+      <div class="ttl">🧩 模板覆盖维度（AI 生成时按以下维度自动写具体，无需手动填写）</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">${dimsHtml}</div>
+      ${varsDetailHtml}
     </div>
 
     <div class="card tpl-card" style="margin-top:16px;">
@@ -169,6 +194,15 @@ export function detail(slug: string): void {
     </div>
     <div id="msg" class="muted" style="font-size:.78rem;margin-top:12px;"></div>
   `;
+
+  // 从首页「前往生成」进入时，自动把上一轮需求带入目标输入框，省去重新输入
+  const useGoalEl = (document.getElementById("use-goal") as HTMLTextAreaElement);
+  const pendingGoal = (window as any).__pendingGoal;
+  if (pendingGoal && useGoalEl && !useGoalEl.value) {
+    useGoalEl.value = String(pendingGoal);
+    (window as any).__pendingGoal = null;
+    useGoalEl.focus();
+  }
 
   (document.getElementById("use-btn") as HTMLButtonElement).addEventListener("click", handleUse);
   const stopU = (document.getElementById("use-stop") as HTMLButtonElement);
@@ -484,7 +518,7 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
     } catch (e) {
       const m = (e && (e as any).message) || "";
       if (/API 错误|401|Authentication|api ?key|invalid|key/i.test(m)) throw e;
-      live.textContent += "\n（服务端 Agent 暂不可用，已自动改用浏览器直连生成）";
+      live.textContent += "\n（服务端 Agent 暂不可用" + (m ? "：" + m : "") + "，已自动改用浏览器直连生成）";
       renderGenSteps("draft", GEN_STEPS_3);
       appendThink("已切换浏览器直连，正在调用模型代写提示词…");
       res = await LLM.useTemplate(ctx.current, goal, onToken, ctx.useController.signal, true, (stage) => {

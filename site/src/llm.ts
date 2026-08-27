@@ -358,7 +358,15 @@ export const LLM = (function () {
     const a = text.indexOf("{");
     const b = text.lastIndexOf("}");
     if (a === -1 || b === -1) throw new Error("模型未返回合法 JSON");
-    return JSON.parse(text.slice(a, b + 1));
+    const slice = text.slice(a, b + 1);
+    try { return JSON.parse(slice); } catch (err) {
+      // 兜底：模型偶发输出未转义控制字符（真实换行/回车等，JSON.parse 抛 Bad control character），
+      // 清洗掉非法控制字符后重试一次；仍失败则抛原错误。
+      const cleaned = slice.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+      try { return JSON.parse(cleaned); } catch {
+        throw err;
+      }
+    }
   }
 
   // F1：一句话 + 行业 -> 模板草稿（onToken 可选，传入则流式）；signal 用于中断

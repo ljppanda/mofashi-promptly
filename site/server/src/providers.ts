@@ -74,6 +74,7 @@ export interface ChatOpts {
   apiSecret?: string; // 文心用
   system: string;
   user: string;
+  jsonMode?: boolean; // 强制模型输出合法 JSON（OpenAI 兼容 response_format: {type:"json_object"}）
   onToken?: (t: string) => void;
   signal?: AbortSignal;
   proxyBase?: string; // 用户若开启代理，服务端模型调用也走该代理的 /relay（避免服务端直连被墙导致 agent 失败回落）
@@ -172,11 +173,13 @@ async function streamOpenAI(p: ProviderDef, model: string, key: string, opts: Ch
   const body = {
     model,
     stream: true,
+    max_tokens: 8192,
     stream_options: { include_usage: true },
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
     ],
+    ...(opts.jsonMode ? { response_format: { type: "json_object" } } : {}),
   };
   const r = await doFetch(url, "POST", { ...authHeaders(p, key) }, body, opts.signal, opts.proxyBase);
   if (!r.ok) throw new Error(`[${p.label}] ${r.status} ${await r.text().catch(() => "")}`);
@@ -287,8 +290,8 @@ function statusOf(err: unknown): number | null {
 // 判断错误是否值得重试：超时/网络故障/限流(429)/5xx 可重试；4xx 鉴权或参数错误不可重试。
 function isRetryable(err: unknown): boolean {
   if (!err) return false;
+  if ((err as any)?.name === "AbortError") return false; // 超时/用户停止：不重试（message 正则里的 aborted 字样会误判，这里显式覆盖）
   const e = err as any;
-  if (e?.name === "AbortError") return true; // 客户端超时
   const msg = String(e?.message ?? e);
   if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|ECONNRESET|network|socket|aborted|timeout|undici/i.test(msg)) return true;
   const s = statusOf(err);
@@ -339,7 +342,7 @@ async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
   const p = providerOf(opts.provider);
   const t0 = Date.now();
   const ctrl = new AbortController();
-  const TIMEOUT_MS = 90_000;
+  const TIMEOUT_MS = 600_000; // 总兜底 10 分钟：F2 超长成品生成（6000+ tokens）耗时可达 3min+，180s 会误杀持续输出；流式持续输出不中断，真卡住才到点
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   if (opts.signal) {
     if (opts.signal.aborted) ctrl.abort();
@@ -426,6 +429,7 @@ export async function chatWithTools(opts: {
   proxyBase?: string;
   system: string;
   user: string;
+  jsonMode?: boolean; // 强制模型输出合法 JSON（OpenAI 兼容 response_format: {type:"json_object"}）
   tools: unknown[];
   signal?: AbortSignal;
   lsParentRunId?: string | null;
@@ -446,6 +450,7 @@ export async function chatWithTools(opts: {
       ],
       tools: opts.tools,
       tool_choice: "auto",
+      ...(opts.jsonMode ? { response_format: { type: "json_object" } } : {}),
     };
     const r = await doFetch(url, "POST", { ...authHeaders(p, opts.apiKey) }, body, opts.signal, opts.proxyBase);
     if (!r.ok) throw new Error(`[${p.label}] ${r.status} ${await r.text().catch(() => "")}`);

@@ -96,7 +96,15 @@ function parseJsonObject(text: string): any {
   const s = t.indexOf("{");
   const e = t.lastIndexOf("}");
   if (s < 0 || e <= s) throw new Error("模型未返回合法 JSON（未找到 {..}）");
-  try { return JSON.parse(t.slice(s, e + 1)); } catch (err) { throw new Error("模型未返回合法 JSON（已尝试去除围栏/截断）：" + String(err)); }
+  const slice = t.slice(s, e + 1);
+  try { return JSON.parse(slice); } catch (err) {
+    // 兜底：模型偶发输出未转义控制字符（真实换行/回车等，JSON.parse 抛 Bad control character），
+    // 清洗掉非法控制字符后重试一次；仍失败则抛原错误（保留既有错误信息风格）。
+    const cleaned = slice.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+    try { return JSON.parse(cleaned); } catch {
+      throw new Error("模型未返回合法 JSON（已尝试去除围栏/截断）：" + String(err));
+    }
+  }
 }
 
 function extractJSON(text: string, industry: string): TemplateDraft {
@@ -158,6 +166,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
       proxyBase: input.proxyBase, lsParentRunId: input.lsParentRunId, signal,
       system: SYS_RETRIEVE_TOOL, user: `行业倾向：${s.industry}\n需求：${s.sentence}`,
       tools: [retrieveToolSpec()],
+      jsonMode: true, // 工具决策返回 JSON arguments 结构，强制合法 JSON 更稳
     });
     let q = s.sentence;
     if (r.toolCalls && r.toolCalls.length) {
@@ -188,6 +197,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
         proxyBase: input.proxyBase,
       lsParentRunId: input.lsParentRunId,
         system: sysUser, user: userMsg, onToken: events.onToken, signal,
+        jsonMode: true, // draft 节点要求模型输出合法 JSON 模板
       });
       events.onUsage?.(res.usage);
       const parsed = extractJSON(res.text, s.industry);
@@ -475,6 +485,7 @@ export async function runAgentClarify(input: AgentClarifyInput, events?: AgentCl
         proxyBase: input.proxyBase,
         lsParentRunId: rootId,
         system: sys, user: userMsg, signal,
+        jsonMode: true, // 访谈节点要求模型输出合法 JSON（complete/questions）
       });
       const obj = parseJsonObject(res.text);
       if (obj.complete === true) {
