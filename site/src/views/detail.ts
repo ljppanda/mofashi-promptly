@@ -510,7 +510,7 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
       if (name === "finalize") appendThink("自检完成，正在定稿输出最终成品提示词…");
       renderGenSteps(name, GEN_STEPS_3);
     };
-    const onThink = (text: string) => { appendThink(text); };
+    const onThink = (text: string, kind?: string) => { appendThink(text, "gen-steps", kind); };
     const onContext = (refs: any[]) => { renderRagRefs(refs); };
     let res: any;
     try {

@@ -658,7 +658,7 @@ export const LLM = (function () {
       else if (name === "meta") { if (onNode) onNode("meta"); }
       else if (name === "node" && data && onNode) { onNode(data.name); }
       else if (name === "context" && data && onContext) { onContext(data); }
-      else if (name === "think" && data && onThink) { onThink(data.text); }
+      else if (name === "think" && data && onThink) { onThink(data.text, data.kind); }
       else if (name === "result") { tpl = data; tpl.slug = "gen-" + Date.now(); tpl.generated = true; }
       else if (name === "usage") usage = data;
       else if (name === "error") throw new Error((data && data.message) || "Agent 出错");
@@ -684,7 +684,7 @@ export const LLM = (function () {
       else if (name === "meta") { if (onNode) onNode("meta"); }
       else if (name === "node" && data && onNode) { onNode(data.name); }
       else if (name === "context" && data && onContext) { onContext(data); }
-      else if (name === "think" && data && onThink) { onThink(data.text); }
+      else if (name === "think" && data && onThink) { onThink(data.text, data.kind); }
       else if (name === "result") { prompt = data.prompt; sources = data.sources || []; }
       else if (name === "usage") usage = data;
       else if (name === "error") throw new Error((data && data.message) || "Agent 出错");
@@ -709,7 +709,7 @@ export const LLM = (function () {
     let result = null;
     await readAgentSSE(r, (name, data) => {
       if (name === "node" && data && onNode) onNode(data.name);
-      else if (name === "think" && data && onThink) onThink(data.text);
+      else if (name === "think" && data && onThink) onThink(data.text, data.kind);
       else if (name === "result") result = data;
       else if (name === "error") throw new Error((data && data.message) || "访谈出错");
       else if (name === "done") { /* 结束标记，无需处理 */ }
@@ -731,7 +731,7 @@ export const LLM = (function () {
     await readAgentSSE(r, (name, data) => {
       if (name === "token" && onToken) onToken(data && data.text, false);
       else if (name === "node" && data && onNode) onNode(data.name);
-      else if (name === "think" && data && onThink) onThink(data.text);
+      else if (name === "think" && data && onThink) onThink(data.text, data.kind);
       else if (name === "result") prompt = data.prompt;
       else if (name === "error") throw new Error((data && data.message) || "改写出错");
     }, signal);

@@ -43,7 +43,7 @@ export interface AgentEvents {
   onNode?: (name: string) => void;
   onToken?: (text: string) => void;
   onContext?: (refs: RagRef[]) => void; // RAG 召回的参考范例清单
-  onThink?: (text: string) => void; // 模型“思考/产物”文本（如自审意见），前端实时展示
+  onThink?: (text: string, kind?: "reasoning" | "msg") => void; // kind 区分“模型思维链(reasoning)”与“编排旁白(msg)” // 模型“思考/产物”文本（如自审意见），前端实时展示
   onResult?: (tpl: TemplateDraft) => void;
   onUsage?: (u: Usage) => void;
   onError?: (msg: string) => void;
@@ -151,6 +151,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
       proxyBase: input.proxyBase,
       lsParentRunId: input.lsParentRunId,
       system: getPrompt("clarify", pv?.clarify), user: `行业倾向：${s.industry}\n需求：${s.sentence}`, signal,
+      onReasoning: (t) => events.onThink?.(t, "reasoning"),
     });
     events.onUsage?.(res.usage);
     return { clarification: res.text.trim() };
@@ -187,6 +188,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
     events.onThink?.(`已从模板库检索到 ${rag.refs.length} 个相似范例，将借鉴其结构…`);
 
     events.onNode?.("draft");
+    events.onThink?.("📝 正在拆解需求、规划模板骨架（角色 / 背景 / 任务 / 输出格式 / 约束）…");
     const sysUser = getPrompt("draft", pv?.draft)
       .replace("{{retrieved}}", rag.context ? "下面是同行业的高质量结构范例（few-shot），请借鉴其「角色 + 上下文/背景 + 任务与约束 + 输出格式」四段式，但不要照抄：\n" + rag.context : "")
       .replace("{{critique}}", s.critique ? "上一版被自审打回，请重点修正以下意见：" + s.critique : "");
@@ -197,6 +199,7 @@ function buildGraph(input: AgentInput, events: AgentEvents, signal?: AbortSignal
         proxyBase: input.proxyBase,
       lsParentRunId: input.lsParentRunId,
         system: sysUser, user: userMsg, onToken: events.onToken, signal,
+        onReasoning: (t) => events.onThink?.(t, "reasoning"),
         jsonMode: true, // draft 节点要求模型输出合法 JSON 模板
       });
       events.onUsage?.(res.usage);
@@ -319,7 +322,7 @@ export interface AgentUseEvents {
   onNode?: (name: string) => void;
   onToken?: (text: string) => void;
   onContext?: (refs: RagRef[]) => void;
-  onThink?: (text: string) => void;
+  onThink?: (text: string, kind?: "reasoning" | "msg") => void; // kind 区分“模型思维链(reasoning)”与“编排旁白(msg)”
   onResult?: (r: { prompt: string; sources: RagRef[] }) => void;
   onUsage?: (u: Usage) => void;
   onError?: (msg: string) => void;
@@ -340,6 +343,7 @@ export async function runAgentUse(
 
       // ② 撰写：模板骨架 + 用户目标 -> 成品提示词（模型代写全部具体内容）
       events.onNode?.("draft");
+      events.onThink?.("📝 正在结合模板结构与你的目标，逐段代写成品提示词（角色 / 背景 / 任务 / 输出规范 / 边界）…");
       const dims = (input.template.variables || [])
         .map((v) => "- " + v.label + (v.options && v.options.length ? `（可覆盖维度：${v.options.join("、")}）` : ""))
         .join("\n");
@@ -360,6 +364,7 @@ export async function runAgentUse(
         system: sys,
         user: userMsg,
         onToken: events.onToken,
+        onReasoning: (t) => events.onThink?.(t, "reasoning"),
         signal,
       });
       events.onUsage?.(res.usage);
@@ -374,12 +379,15 @@ export async function runAgentUse(
         return;
       }
       try {
+        events.onThink?.("🔍 正在对照生产级清单审查首稿，定位可改进项（角色 / 约束 / 工作流 / 输出规范 / 兜底）…");
         const scSys = `你是提示词质量审查员。对照【生产级提示词清单】审查给定提示词：①角色与背景是否具体（身份/资历/立场/能力边界）②目标是否明确可量化③是否有核心约束与禁止项④是否有工作流⑤输出规范是否含格式示例⑥是否有边界与兜底⑦是否有自检清单。找出缺失或薄弱项，然后直接输出【改写后的完整生产级提示词全文】。只输出提示词正文，不要解释、不要代码块围栏、开头不要写"以下是…"。`;
         const scUser = `用户原始目标：${input.goal}\n\n待审查提示词：\n${prompt}\n\n请批判并输出改写后的完整提示词：`;
         const sc = await chatStream({
           provider: input.provider, model: input.model, apiKey: input.apiKey,
           apiSecret: input.apiSecret, proxyBase: input.proxyBase, lsParentRunId: rootId,
-          system: scSys, user: scUser, onToken: undefined, signal,
+          system: scSys, user: scUser, onToken: undefined,
+          onReasoning: (t) => events.onThink?.(t, "reasoning"),
+          signal,
         });
         const improved = (sc.text || "").trim();
         if (improved) prompt = improved;
@@ -461,7 +469,7 @@ function fallbackQuestions(tpl: { industry?: string }): ClarifyQuestion[] {
 // 访谈澄清阶段的前端可观察事件（思考过程流式展示）
 export interface AgentClarifyEvents {
   onNode?: (name: string) => void;
-  onThink?: (text: string) => void;
+  onThink?: (text: string, kind?: "reasoning" | "msg") => void; // kind 区分“模型思维链(reasoning)”与“编排旁白(msg)”
   onResult?: (r: AgentClarifyResult) => void;
   onError?: (msg: string) => void;
 }
@@ -558,7 +566,7 @@ export interface AgentRefineInput {
 export interface AgentRefineEvents {
   onNode?: (name: string) => void;
   onToken?: (text: string) => void;
-  onThink?: (text: string) => void;
+  onThink?: (text: string, kind?: "reasoning" | "msg") => void; // kind 区分“模型思维链(reasoning)”与“编排旁白(msg)”
   onResult?: (r: { prompt: string }) => void;
   onUsage?: (u: Usage) => void;
   onError?: (msg: string) => void;
@@ -598,7 +606,8 @@ export async function runAgentRefine(input: AgentRefineInput, events?: AgentRefi
     (analysis ? `\n\n【改写要点（已分析得出，请逐条落实）】\n${analysis}` : "");
   const res = await chatStream({
     provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
-    proxyBase: input.proxyBase, system: sysRewrite, user: baseUser + `\n\n请输出改写后的完整提示词全文。`, onToken: events?.onToken, signal,
+    proxyBase: input.proxyBase, system: sysRewrite, user: baseUser + `\n\n请输出改写后的完整提示词全文。`, onToken: events?.onToken,
+    onReasoning: (t) => events?.onThink?.(t, "reasoning"), signal,
   });
   events?.onUsage?.(res.usage);
   const prompt = (res.text || "").trim();

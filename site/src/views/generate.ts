@@ -50,7 +50,7 @@ export async function handleGenerate(): Promise<void> {
       if (name === "result") { renderGenSteps("__done__", GEN_STEPS_5); return; }
       renderGenSteps(name, GEN_STEPS_5);
     };
-    const onThink = (text: string) => { appendThink(text); };
+    const onThink = (text: string, kind?: string) => { appendThink(text, "gen-steps", kind); };
     const onContext = (refs: any[]) => { renderRagRefs(refs); };
     let res: any;
     try {

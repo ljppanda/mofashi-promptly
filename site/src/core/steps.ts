@@ -16,8 +16,15 @@ export function renderRagRefs(refs: any[]): void {
     `</div>`;
 }
 
+// 切换节点前闭合“打开的思考流”，避免把上一节点的推理 chunk 串到下一节点
+export function closeThinkStream(): void {
+  ctx._thinkStep = "";
+  ctx._thinkKind = "";
+}
+
 // 状态机步骤条：把 Agent 的节点事件可视化（实时思考时间线）
 export function renderGenSteps(activeKey: string, steps?: any[], containerId = "gen-steps"): void {
+  closeThinkStream(); // 重新渲染意味着节点已切换，闭合上一节点的流式思考
   const el = document.getElementById(containerId || "gen-steps");
   if (!el) return;
   const list = steps || GEN_STEPS_5;
@@ -32,30 +39,51 @@ export function renderGenSteps(activeKey: string, steps?: any[], containerId = "
     else if (curIdx === actIdx) state = "active";
     const hint = (state === "active" || state === "done") ? (STEP_HINT[s.k] || "") : "";
     const thinks = (ctx.thinkLog[s.k] || []).map((t) => `<div class="think-line">${esc(t)}</div>`).join("");
+    const head = thinks ? `<div class="think-head">🧠 思考过程</div>` : "";
     const mark = state === "done" ? "✓" : (state === "active" ? "" : "");
     return `<div class="step ${state}" data-step="${s.k}">
       <div class="step-dot">${mark}</div>
       <div class="step-body">
         <div class="step-title">${s.label}</div>
         ${hint ? `<div class="step-hint">${hint}</div>` : ""}
-        <div class="step-think">${thinks}</div>
+        <div class="step-think">${head}${thinks}</div>
       </div>
     </div>`;
   }).join("") + '</div>';
 }
 
-// 把后端发来的“思考/产物”文本实时追加到当前激活步骤下
-export function appendThink(text: string, containerId = "gen-steps"): void {
+// 把后端发来的“思考/产物”文本实时追加到当前激活步骤下。
+// kind="reasoning"（模型思维链）：连续 chunk 合并到当前打开的那一行，避免每帧一个 DOM 节点；
+// kind="msg"（默认，编排旁白）：离散消息，另起一行。
+export function appendThink(text: string, containerId = "gen-steps", kind: string = "msg"): void {
   if (!text) return;
-  if (!ctx.thinkLog[ctx.activeStepKey]) ctx.thinkLog[ctx.activeStepKey] = [];
-  ctx.thinkLog[ctx.activeStepKey].push(text);
+  const step = ctx.activeStepKey;
+  if (!ctx.thinkLog[step]) ctx.thinkLog[step] = [];
+  const arr = ctx.thinkLog[step];
   const base = containerId || "gen-steps";
-  const box = document.querySelector('#' + base + ' .step[data-step="' + ctx.activeStepKey + '"] .step-think');
-  if (box) {
-    const d = document.createElement("div");
-    d.className = "think-line";
-    d.textContent = text;
-    box.appendChild(d);
-    try { box.scrollIntoView({ block: "nearest" }); } catch (e) {}
+  const box = document.querySelector('#' + base + ' .step[data-step="' + step + '"] .step-think') as HTMLElement | null;
+
+  const streaming = kind === "reasoning" && ctx._thinkStep === step && ctx._thinkKind === "reasoning" && !!box && !!box.lastElementChild;
+  if (streaming) {
+    // 续写当前打开的推理行（DOM 与数据同步）
+    arr[arr.length - 1] += text;
+    (box!.lastElementChild as HTMLElement).textContent = arr[arr.length - 1];
+  } else {
+    ctx._thinkStep = step;
+    ctx._thinkKind = kind;
+    arr.push(text);
+    if (box) {
+      if (!box.querySelector(".think-head")) {
+        const h = document.createElement("div");
+        h.className = "think-head";
+        h.textContent = "🧠 思考过程";
+        box.appendChild(h);
+      }
+      const d = document.createElement("div");
+      d.className = "think-line";
+      d.textContent = text;
+      box.appendChild(d);
+      try { box.scrollIntoView({ block: "nearest" }); } catch (e) {}
+    }
   }
 }

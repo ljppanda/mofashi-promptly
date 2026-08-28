@@ -24,6 +24,8 @@ export interface AppCtx {
   currentSort: string;                           // 热度榜排序维度
   activeStepKey: string;                         // 状态机当前步
   thinkLog: Record<string, string[]>;            // 各步思考日志
+  _thinkStep: string;                            // 当前正在流式写入思考的节点（用于合并推理 chunk）
+  _thinkKind: string;                            // 当前打开思考行的类型（"reasoning" | "msg" | ""）
 }
 
 // 工厂函数：延迟构造以避免「在初始化前引用 ctx」的问题，同时符合 Factory 模式。
@@ -52,6 +54,8 @@ function makeCtx(): AppCtx {
     currentSort: "heat",
     activeStepKey: "",
     thinkLog: {},
+    _thinkStep: "",
+    _thinkKind: "",
   };
   return c;
 }

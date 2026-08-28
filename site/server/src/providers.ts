@@ -76,6 +76,7 @@ export interface ChatOpts {
   user: string;
   jsonMode?: boolean; // 强制模型输出合法 JSON（OpenAI 兼容 response_format: {type:"json_object"}）
   onToken?: (t: string) => void;
+  onReasoning?: (t: string) => void; // 模型思维链（reasoning_content / thinking_delta / thought）流式回调，用于前端实时展示“思考过程”
   signal?: AbortSignal;
   proxyBase?: string; // 用户若开启代理，服务端模型调用也走该代理的 /relay（避免服务端直连被墙导致 agent 失败回落）
   lsParentRunId?: string | null; // LangSmith：父 run id，每次模型调用会建一条子 run 上报
@@ -191,6 +192,8 @@ async function streamOpenAI(p: ProviderDef, model: string, key: string, opts: Ch
       const j = JSON.parse(line);
       const delta = j.choices?.[0]?.delta?.content;
       if (delta) { text += delta; opts.onToken?.(delta); }
+      const reasoning = j.choices?.[0]?.delta?.reasoning_content;
+      if (reasoning) { opts.onReasoning?.(reasoning); }
       if (j.usage) {
         usage.inputTokens = j.usage.prompt_tokens ?? usage.inputTokens;
         usage.outputTokens = j.usage.completion_tokens ?? usage.outputTokens;
@@ -220,6 +223,7 @@ async function streamClaude(p: ProviderDef, model: string, key: string, opts: Ch
     try {
       const j = JSON.parse(line);
       if (j.type === "content_block_delta" && j.delta?.type === "text_delta") { text += j.delta.text; opts.onToken?.(j.delta.text); }
+      else if (j.type === "content_block_delta" && j.delta?.type === "thinking_delta") { if (j.delta.thinking) opts.onReasoning?.(j.delta.thinking); }
       else if (j.type === "message_start" && j.message?.usage) { usage.inputTokens = j.message.usage.input_tokens ?? 0; usage.cacheReadTokens = j.message.usage.cache_read_input_tokens ?? 0; usage.cacheCreateTokens = j.message.usage.cache_creation_input_tokens ?? 0; }
       else if (j.type === "message_delta" && j.usage) { usage.outputTokens = j.usage.output_tokens ?? 0; }
     } catch { /* ignore */ }
@@ -241,8 +245,13 @@ async function streamGemini(p: ProviderDef, model: string, key: string, opts: Ch
   await readSSE(r, (line) => {
     try {
       const j = JSON.parse(line);
-      const part = j.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (part) { text += part; opts.onToken?.(part); }
+      const parts = j.candidates?.[0]?.content?.parts;
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part.thought && part.text) { opts.onReasoning?.(part.text); }
+          else if (part.text) { text += part.text; opts.onToken?.(part.text); }
+        }
+      }
       if (j.usageMetadata) {
         usage.inputTokens = j.usageMetadata.promptTokenCount ?? 0;
         usage.outputTokens = j.usageMetadata.candidatesTokenCount ?? 0;
