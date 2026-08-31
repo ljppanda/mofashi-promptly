@@ -40,23 +40,33 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
         <div class="ttl">🔧 一键优化（F13 · 自动评测→改写→对比）</div>
         <button id="opt-close" class="btn btn-ghost btn-sm">关闭</button>
       </div>
-      <p class="muted mt-2" style="font-size:.8rem;">用你自己的 Key 在浏览器本地跑：对模板采样若干测试目标 → 实例化→跑模型→裁判打分；均分低于阈值则自动改写并复测。全部本地，不上传服务器。</p>
+      <p class="muted mt-2" style="font-size:.8rem;">用你自己的 Key 在浏览器本地跑：对模板采样若干测试目标 → 实例化→跑模型→裁判打分；均分低于阈值则自动改写并复测。全部本地，不上传服务器。<b style="color:var(--brand-700)">裁判建议配另一家厂商的 Key</b>，避免同源自评虚高。</p>
       <div class="flex gap-3 mt-3 flex-wrap items-end">
         <div>
           <label class="text-sm font-medium" style="color:var(--slate)">测试样本数</label>
-          <input id="opt-n" type="number" min="1" max="10" value="5" class="input" style="width:90px;margin-top:4px;" />
+          <input id="opt-n" type="number" min="1" max="10" value="2" class="input" style="width:90px;margin-top:4px;" />
         </div>
         <div>
           <label class="text-sm font-medium" style="color:var(--slate)">达标阈值（0-20）</label>
           <input id="opt-th" type="number" min="0" max="20" value="14" class="input" style="width:110px;margin-top:4px;" />
         </div>
-        <div style="flex:1;min-width:200px;">
-          <label class="text-sm font-medium" style="color:var(--slate)">裁判模型（限当前 Key 厂商：${esc(LLM.PROVIDERS[settings.provider]?.label || settings.provider || "未设置")}）</label>
+        <div style="flex:1;min-width:300px;">
+          <label class="text-sm font-medium" style="color:var(--slate)">裁判模型（<b style="color:var(--brand-700)">建议用不同厂商</b>，避免自评偏差）</label>
           <div class="flex gap-2 items-center" style="margin-top:4px;">
-            <select id="opt-judge-model" class="select" style="flex:1.2;margin-bottom:0;" disabled></select>
-            <button id="opt-judge-fetch" class="btn btn-ghost btn-sm" type="button" title="用当前 Key 从厂商拉取在役模型">🔄</button>
+            <select id="opt-judge-provider" class="select" style="flex:1;margin-bottom:0;"></select>
+            <input id="opt-judge-key" type="password" class="input" placeholder="该厂商的 API Key" style="flex:1.2;margin-bottom:0;" autocomplete="off" />
           </div>
-          <p class="muted" style="font-size:.74rem;margin-top:4px;">裁判必须用当前 Key 所属厂商的模型，否则 Key 对不上无法调用；选「用当前设置的模型」则与被测同模型。</p>
+          <div class="flex gap-2 items-center" style="margin-top:6px;">
+            <select id="opt-judge-model" class="select" style="flex:1.2;margin-bottom:0;" disabled></select>
+            <button id="opt-judge-fetch" class="btn btn-ghost btn-sm" type="button" title="用上方 Key 从该厂商拉取在役模型">🔄</button>
+          </div>
+          <div id="opt-judge-secret-wrap" style="display:none;margin-top:6px;">
+            <input id="opt-judge-secret" type="password" class="input" placeholder="该厂商的 API Secret（百度文心需要）" autocomplete="off" />
+          </div>
+          <p class="muted" style="font-size:.74rem;margin-top:6px;line-height:1.55;">裁判由<b>另一家厂商</b>的模型独立打分：同厂商模型训练同源、偏好相近，容易互相抬高分数（自评偏差）。Key 仅存在你本机浏览器。</p>
+          <label class="flex items-center gap-1" style="font-size:.74rem;margin-top:6px;color:var(--slate);cursor:pointer;">
+            <input id="opt-judge-same" type="checkbox" style="margin:0;" /> 我只有一个厂商的 Key，仍用同厂商（自评，分数可能偏高）
+          </label>
         </div>
       </div>
       <div class="mt-3">
@@ -73,6 +83,10 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
         <span id="opt-stage-text" style="flex:1;min-width:0;">准备中…</span>
         <span id="opt-timer" class="muted" style="margin-left:8px;font-variant-numeric:tabular-nums;white-space:nowrap;"></span>
       </div>
+      <div id="opt-stream-wrap" style="display:none;margin-top:10px;">
+        <div class="muted" style="font-size:.76rem;margin-bottom:6px;">📊 实时评测过程（逐样本打分明细）</div>
+        <div id="opt-stream" style="max-height:280px;overflow:auto;display:flex;flex-direction:column;gap:6px;"></div>
+      </div>
       <div id="opt-result" class="mt-4" style="display:none;"></div>
       <div id="opt-diff" class="mt-3" style="display:none;"></div>
       <div id="opt-actions" class="flex gap-2 mt-3" style="display:none;">
@@ -85,7 +99,7 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
   // 预填测试目标
   const goalsEl = (document.getElementById("opt-goals") as HTMLTextAreaElement);
   const nEl = (document.getElementById("opt-n") as HTMLInputElement);
-  goalsEl.value = genSamples(t, Math.max(1, Math.min(10, Number(nEl.value) || 5))).join("\n");
+  goalsEl.value = genSamples(t, Math.max(1, Math.min(10, Number(nEl.value) || 2))).join("\n");
 
   let controller: AbortController | null = null;
   let newPrompt: string | null = null;
@@ -101,50 +115,123 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
   const diffEl = (document.getElementById("opt-diff") as HTMLElement);
   const actEl = (document.getElementById("opt-actions") as HTMLElement);
 
-  // —— 裁判模型：锁定当前 Key 所属厂商，仅可选该厂商模型（避免 Key 对不上无法调用）——
-  const jProv = (settings.provider && LLM.PROVIDERS[settings.provider]) ? settings.provider : "";
-  const jProvLabel = jProv ? LLM.PROVIDERS[jProv].label : "未设置";
+  // —— 裁判：独立厂商 + 独立 Key。同厂商模型训练同源、偏好相近，容易互相抬分（自评偏差），
+  //     故默认把「当前生成厂商」从候选里排除；确只有一个厂商 Key 时可勾选允许，但明确警示。
+  const curProv = (settings.provider && LLM.PROVIDERS[settings.provider]) ? settings.provider : "";
+  const judgeProvSel = (document.getElementById("opt-judge-provider") as HTMLSelectElement);
+  const judgeKeyEl = (document.getElementById("opt-judge-key") as HTMLInputElement);
+  const judgeSecretWrap = (document.getElementById("opt-judge-secret-wrap") as HTMLElement);
+  const judgeSecretEl = (document.getElementById("opt-judge-secret") as HTMLInputElement);
   const judgeModelSel = (document.getElementById("opt-judge-model") as HTMLSelectElement);
   const judgeFetchBtn = (document.getElementById("opt-judge-fetch") as HTMLButtonElement);
-  function populateJudgeModels(live?: string[] | null): void {
-    if (!jProv) { judgeModelSel.disabled = true; judgeModelSel.innerHTML = ""; return; }
-    const prov = LLM.PROVIDERS[jProv];
-    const list = (live && live.length) ? live : (prov.models || []);
-    const cur = (settings.customModel && settings.customModel.trim()) || settings.model || prov.default;
-    const opts = ['<option value="">（用当前设置的模型：' + esc(cur) + '）</option>']
-      .concat(list.map((m: string) => '<option value="' + esc(m) + '">' + esc(m) + '</option>'));
-    const prev = judgeModelSel.value;
-    judgeModelSel.innerHTML = opts.join("");
-    if (prev && (prev === "" || list.indexOf(prev) !== -1)) judgeModelSel.value = prev;
-    else judgeModelSel.value = ""; // 默认用当前设置的模型
-    judgeModelSel.disabled = false;
+  const judgeSameChk = (document.getElementById("opt-judge-same") as HTMLInputElement);
+
+  // 上次保存的裁判配置（仅本机 localStorage，与「设置」页的 Key 相互独立）
+  const jSavedProv = (settings.judgeProvider && LLM.PROVIDERS[settings.judgeProvider]) ? settings.judgeProvider : "";
+  const jSavedKey = typeof settings.judgeKey === "string" ? settings.judgeKey : "";
+  const jSavedSecret = typeof settings.judgeSecret === "string" ? settings.judgeSecret : "";
+  const jSavedModel = typeof settings.judgeModel === "string" ? settings.judgeModel : "";
+
+  const allowSame = (): boolean => !!(judgeSameChk && judgeSameChk.checked);
+  const isSameProv = (p: string): boolean => !!p && p === curProv;
+
+  function renderProviders(keep?: string): void {
+    const keys = Object.keys(LLM.PROVIDERS).filter((k) => allowSame() || !isSameProv(k));
+    judgeProvSel.innerHTML = keys.map((k) =>
+      `<option value="${esc(k)}">${esc(LLM.PROVIDERS[k].label)}${isSameProv(k) ? "（同厂商·自评）" : ""}</option>`).join("");
+    const want = keep || jSavedProv;
+    if (want && keys.indexOf(want) !== -1) judgeProvSel.value = want;
+    else if (keys.length) judgeProvSel.value = keys[0];
   }
-  // 打开即用真实 Key 拉取（不回退 OpenRouter，避免列出无 Key 不可用的型号）；无 Key/失败则回退内置清单
-  (async () => {
-    if (!jProv) { judgeModelSel.disabled = true; return; }
-    if (settings.key) {
-      try {
-        const ids = await LLM.listModels(jProv, settings.key, settings.secret || "", false);
-        if (ids && ids.length) { populateJudgeModels(ids); return; }
-      } catch (e) {}
-    }
-    populateJudgeModels();
-  })();
-  if (judgeFetchBtn) judgeFetchBtn.addEventListener("click", async () => {
-    if (!jProv) { toast("「设置」页未配置厂商，无法选择裁判模型"); return; }
-    if (!settings.key) { toast("请先在「设置」页填写 " + jProvLabel + " 的 API Key，才能拉取真实模型"); return; }
-    judgeFetchBtn.disabled = true; judgeFetchBtn.textContent = "…";
+
+  function populateJudgeModels(live?: string[] | null): void {
+    const p = judgeProvSel.value;
+    if (!p || !LLM.PROVIDERS[p]) { judgeModelSel.disabled = true; judgeModelSel.innerHTML = ""; return; }
+    const prov = LLM.PROVIDERS[p];
+    const list = (live && live.length) ? live : (prov.models || []);
+    judgeModelSel.innerHTML = list.map((m: string) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
+    const want = (p === jSavedProv) ? jSavedModel : "";
+    judgeModelSel.value = (want && list.indexOf(want) !== -1) ? want : (prov.default || list[0] || "");
+    judgeModelSel.disabled = !list.length;
+  }
+
+  // 少数厂商（百度文心）除 Key 外还需 Secret
+  function syncSecretField(): void {
+    const p = judgeProvSel.value;
+    const need = !!(p && LLM.PROVIDERS[p] && (LLM.PROVIDERS[p] as any).needSecret);
+    if (judgeSecretWrap) judgeSecretWrap.style.display = need ? "" : "none";
+  }
+
+  function persistJudge(): void {
     try {
-      const ids = await LLM.listModels(jProv, settings.key, settings.secret || "", false);
-      if (ids && ids.length) { populateJudgeModels(ids); toast("✓ 已拉取 " + ids.length + " 个在役模型"); }
-      else { populateJudgeModels(); toast("⚠ 实时拉取失败：Key 无效或 " + jProvLabel + " 不支持 /models，已用内置清单"); }
+      const s = Store.getSettings();
+      s.judgeProvider = judgeProvSel.value;
+      s.judgeKey = judgeKeyEl.value.trim();
+      s.judgeSecret = judgeSecretEl ? judgeSecretEl.value.trim() : "";
+      s.judgeModel = judgeModelSel.value;
+      Store.saveSettings(s);
+    } catch (e) {}
+  }
+
+  // 「我只有一个厂商的 Key」：当裁判被选成当前厂商、且 Key 还空着时，自动把「设置」里那把 Key 带进来。
+  // 否则这个勾选项只是解锁了选项、用户还得手抄一遍同一个 Key，很别扭。
+  function maybePrefillKey(): void {
+    if (judgeProvSel.value !== curProv) return;
+    if (judgeKeyEl.value.trim() || !settings.key) return;
+    judgeKeyEl.value = String(settings.key || "");
+    if (judgeSecretEl && settings.secret) judgeSecretEl.value = String(settings.secret || "");
+    toast("已带入「设置」里的 " + (LLM.PROVIDERS[curProv]?.label || "当前厂商") + " Key（同厂商自评，分数可能偏高）");
+  }
+
+  async function fetchJudgeModels(silent: boolean): Promise<void> {
+    const p = judgeProvSel.value;
+    const key = judgeKeyEl.value.trim();
+    if (!p || !LLM.PROVIDERS[p]) { if (!silent) toast("请先选择裁判厂商"); return; }
+    if (!key) {
+      populateJudgeModels();
+      if (!silent) toast("请填写 " + LLM.PROVIDERS[p].label + " 的 API Key，才能拉取在役模型");
+      return;
+    }
+    if (judgeFetchBtn) { judgeFetchBtn.disabled = true; judgeFetchBtn.textContent = "…"; }
+    try {
+      const ids = await LLM.listModels(p, key, (judgeSecretEl ? judgeSecretEl.value.trim() : ""), false);
+      if (ids && ids.length) { populateJudgeModels(ids); if (!silent) toast("✓ 已拉取 " + ids.length + " 个在役模型"); }
+      else { populateJudgeModels(); if (!silent) toast("⚠ 拉取失败：Key 无效或该厂商不支持 /models，已用内置清单"); }
     } catch (e: any) {
       populateJudgeModels();
-      toast("✗ 拉取失败：" + (e && e.message ? e.message : e) + "，已用内置清单");
+      if (!silent) toast("✗ 拉取失败：" + (e && e.message ? e.message : e) + "，已用内置清单");
     } finally {
-      judgeFetchBtn.disabled = false; judgeFetchBtn.textContent = "🔄";
+      if (judgeFetchBtn) { judgeFetchBtn.disabled = false; judgeFetchBtn.textContent = "🔄"; }
     }
+  }
+
+  renderProviders();
+  syncSecretField();
+  judgeKeyEl.value = jSavedKey;
+  if (judgeSecretEl) judgeSecretEl.value = jSavedSecret;
+  populateJudgeModels();
+  // 已存过 Key 时，打开即静默拉取该厂商真实在役模型；失败自动回退内置清单
+  if (judgeProvSel.value === jSavedProv && judgeKeyEl.value.trim()) fetchJudgeModels(true);
+
+  judgeProvSel.addEventListener("change", () => {
+    syncSecretField();
+    const sameAsSaved = judgeProvSel.value === jSavedProv;
+    judgeKeyEl.value = sameAsSaved ? jSavedKey : "";
+    if (judgeSecretEl) judgeSecretEl.value = sameAsSaved ? jSavedSecret : "";
+    maybePrefillKey();
+    populateJudgeModels();
+    persistJudge();
   });
+  judgeKeyEl.addEventListener("change", persistJudge);
+  judgeModelSel.addEventListener("change", persistJudge);
+  if (judgeSecretEl) judgeSecretEl.addEventListener("change", persistJudge);
+  if (judgeSameChk) judgeSameChk.addEventListener("change", () => {
+    renderProviders(judgeProvSel.value);
+    maybePrefillKey();
+    populateJudgeModels();
+    if (judgeSameChk.checked) toast("⚠ 已允许同厂商裁判：分数可能偏高，仅供参考");
+  });
+  if (judgeFetchBtn) judgeFetchBtn.addEventListener("click", () => { persistJudge(); fetchJudgeModels(false); });
 
   const DIM_LABELS: Record<string, string> = { relevance: "相关性", structure: "结构", usable: "可用", specific: "具体", safety: "安全", jsonValid: "JSON" };
   function dimHtml(d: any): string {
@@ -161,8 +248,22 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
     const goals = goalsEl.value.split("\n").map((s) => s.trim()).filter(Boolean);
     if (!goals.length) { toast("请至少填一个测试目标"); return; }
     const threshold = Number((document.getElementById("opt-th") as HTMLInputElement).value) || 14;
+    // 裁判：必须用「另一个厂商」的模型独立打分，Key 也用该厂商自己的（resolveCfg 支持 over.key 覆盖）。
+    // 同厂商模型训练同源、偏好相近，自己给自己打分会系统性虚高，故默认禁止。
+    const jProv = judgeProvSel.value;
+    const jKey = judgeKeyEl.value.trim();
+    const jSecret = judgeSecretEl ? judgeSecretEl.value.trim() : "";
     const jModel = judgeModelSel.value;
-    const judgeOver = jModel ? { provider: jProv, model: jModel } : {};
+    if (!jProv || !LLM.PROVIDERS[jProv]) { toast("请选择裁判厂商"); return; }
+    if (!jKey) { toast("请填写裁判厂商（" + LLM.PROVIDERS[jProv].label + "）的 API Key，否则无法调用裁判模型"); return; }
+    if ((LLM.PROVIDERS[jProv] as any).needSecret && !jSecret) { toast("该厂商需要同时填写 API Secret"); return; }
+    if (isSameProv(jProv) && !allowSame()) {
+      toast("为保证评分客观，裁判请使用与生成模型不同的厂商；若只有一个厂商的 Key，请勾选「仍用同厂商」");
+      return;
+    }
+    const judgeOver = { provider: jProv, model: jModel, key: jKey, secret: jSecret };
+    persistJudge();
+    const judgeLabel = LLM.PROVIDERS[jProv].label + " · " + jModel;
     controller = new AbortController();
     runBtn.disabled = true;
     stopBtn.style.display = "";
@@ -173,7 +274,46 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
     const stageBox = document.getElementById("opt-stage") as HTMLElement;
     const stageText = document.getElementById("opt-stage-text") as HTMLElement;
     const stageTimer = document.getElementById("opt-timer") as HTMLElement;
+    const streamWrap = document.getElementById("opt-stream-wrap") as HTMLElement;
+    const streamEl = document.getElementById("opt-stream") as HTMLElement;
     const setStage = (txt: string) => { if (stageText) stageText.textContent = txt; };
+    if (streamEl) streamEl.innerHTML = "";
+    if (streamWrap) streamWrap.style.display = "";
+    const scrollStream = () => { try { if (streamEl) streamEl.scrollTop = streamEl.scrollHeight; } catch (e) {} };
+    // judgeSamples 的 onProgress 第三个参数就是该样本的 JudgeResult（分数/维度/裁判评语），
+    // 此前回调只接了 (done,total) 把它丢弃，所以过程只有"评测中"——这里改成逐条实时渲染。
+    const appendSample = (phase: string, idx: number, total: number, goal: string, r: any) => {
+      if (!streamEl) return;
+      const ok = !!(r && r.available);
+      const sc = (r && typeof r.total === "number") ? (r.total as number) : 0;
+      const note = (r && typeof r.note === "string" && r.note.trim()) ? r.note.trim() : "";
+      const g = String(goal || "").replace(/\s+/g, " ");
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.cssText = "padding:9px 11px;";
+      card.innerHTML = `
+        <div style="font-size:.8rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <b>${esc(phase)} ${idx}/${total}</b>
+          <span class="pill ${ok ? "pill-amber" : ""}">${ok ? sc.toFixed(1) + "/20" : "解析失败"}</span>
+          <span class="muted" style="font-size:.74rem;">${ok ? dimHtml(r.dims) : "裁判输出无法解析"}</span>
+        </div>
+        <div class="muted" style="font-size:.74rem;margin-top:3px;">目标：${esc(g.length > 64 ? g.slice(0, 64) + "…" : g)}</div>
+        ${note ? `<div style="font-size:.76rem;margin-top:4px;color:var(--slate);line-height:1.55;">🗣 裁判：${esc(note.length > 170 ? note.slice(0, 170) + "…" : note)}</div>` : ""}`;
+      streamEl.appendChild(card);
+      scrollStream();
+    };
+    // 通用文本卡片：用于「评测结论」「AI 改写实时预览」
+    const appendNote = (title: string, body: string, highlight = false): HTMLElement | null => {
+      if (!streamEl) return null;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.style.cssText = "padding:9px 11px;" + (highlight ? "border-color:var(--brand);" : "");
+      card.innerHTML = `<div style="font-size:.8rem;"><b>${esc(title)}</b></div>
+        <div class="muted" style="font-size:.76rem;margin-top:4px;white-space:pre-wrap;line-height:1.55;">${esc(body)}</div>`;
+      streamEl.appendChild(card);
+      scrollStream();
+      return card;
+    };
     const t0 = Date.now();
     const stageTimerId = setInterval(() => {
       const s = Math.floor((Date.now() - t0) / 1000);
@@ -186,11 +326,15 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
       setStage(`🚀 已启动评测（共 ${goals.length} 个样本，每个需 3 次模型调用，通常共需 1–4 分钟，请勿关闭弹窗）`);
       progEl.textContent = `评测原版 0/${goals.length}…`;
       const orig = await judgeSamples(t, goals, {}, judgeOver,
-        (done, total) => { progEl.textContent = `评测原版 ${done}/${total}…`; },
+        (done, total, r) => {
+          const sc = (r && typeof r.total === "number") ? `（本样本 ${(r.total as number).toFixed(1)}/20）` : "";
+          progEl.textContent = `评测原版 ${done}/${total}…${sc}`;
+          if (r) appendSample("原版", done, total, goals[done - 1] || "", r);
+        },
         (idx, total, _stage, label) => { setStage(`📝 评测原版 · 第 ${idx}/${total} 个样本 — ${label}…`); },
         controller.signal);
       const agg = await aggregate(orig);
-      let html = `<div class="card" style="padding:12px;"><b>原版：均分 ${agg.avgTotal.toFixed(1)}/20</b>（${agg.count} 有效）<div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div>${metricsHtml(agg)}</div>`;
+      let html = `<div class="card" style="padding:12px;"><b>原版：均分 ${agg.avgTotal.toFixed(1)}/20</b>（${agg.count} 有效）<div class="muted" style="font-size:.78rem;margin-top:5px;">⚖️ 裁判：${esc(judgeLabel)}</div><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div>${metricsHtml(agg)}</div>`;
       if (agg.avgTotal >= threshold) {
         resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">✓ 已达到阈值（${threshold}），质量达标，建议保留原版。如需进一步打磨可手动微调。</p>`;
         resEl.style.display = "";
@@ -200,12 +344,24 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
         return;
       }
       const critique = buildCritique(agg);
+      appendNote("🧾 评测结论（改写依据）", critique.length > 420 ? critique.slice(0, 420) + "…" : critique, true);
       setStage("🧠 均分未达标，正在让 AI 改写提示词（单次调用，约 10–40 秒）…");
       progEl.textContent = `改写优化版…`;
+      let liveCard: HTMLElement | null = null;
       const opt = await LLM.optimizePrompt(t.prompt, critique, (tok, done) => {
+        const txt = tok || "";
         if (!done) {
-          const n = tok ? tok.length : 0;
-          setStage(`✍️ AI 正在改写提示词…（已生成 ${n} 字）`);
+          setStage(`✍️ AI 正在改写提示词…（已生成 ${txt.length} 字）`);
+          if (!liveCard) liveCard = appendNote("✍️ AI 改写中…", "", true);
+          if (liveCard) {
+            const body = liveCard.querySelector("div:last-child") as HTMLElement;
+            const tail = txt.slice(-240);
+            if (body) body.textContent = (txt.length > 240 ? "…" : "") + tail;
+            scrollStream();
+          }
+        } else if (liveCard) {
+          const h = liveCard.querySelector("b") as HTMLElement;
+          if (h) h.textContent = `✓ 改写完成（${txt.length} 字）`;
         }
       }, controller.signal);
       newPrompt = opt.prompt;
@@ -213,7 +369,11 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
       progEl.textContent = `复测优化版 0/${goals.length}…`;
       const optT = { ...t, prompt: newPrompt };
       const optRes = await judgeSamples(optT, goals, {}, judgeOver,
-        (done, total) => { progEl.textContent = `复测优化版 ${done}/${total}…`; },
+        (done, total, r) => {
+          const sc = (r && typeof r.total === "number") ? `（本样本 ${(r.total as number).toFixed(1)}/20）` : "";
+          progEl.textContent = `复测优化版 ${done}/${total}…${sc}`;
+          if (r) appendSample("优化版", done, total, goals[done - 1] || "", r);
+        },
         (idx, total, _stage, label) => { setStage(`📝 复测优化版 · 第 ${idx}/${total} 个样本 — ${label}…`); },
         controller.signal);
       const optAgg = await aggregate(optRes);
