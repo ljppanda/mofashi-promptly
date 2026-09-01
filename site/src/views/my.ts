@@ -9,9 +9,13 @@ import { openImportFile } from "./import.js";
 
 export function myTemplates(): void {
   // 合并“我的模板”与“AI 草稿”（去重，我的模板优先），刷新后草稿也能在此找到
-  const mine = Store.getMine();
-  const drafts = Store.getDrafts().filter(d => !mine.some(m => m.slug === d.slug));
-  const all = mine.concat(drafts);
+  // 必须用取值函数而非一次性快照：删除后要重新读取，否则 render() 渲染的仍是删除前的旧数组
+  const getAll = (): any[] => {
+    const mine = Store.getMine();
+    const drafts = Store.getDrafts().filter((d: any) => !mine.some((m: any) => m.slug === d.slug));
+    return mine.concat(drafts);
+  };
+  let all = getAll();
   let activeTag: string | null = null; // F37 标签筛选状态
   ctx.appEl().innerHTML = `
     <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
@@ -60,6 +64,9 @@ export function myTemplates(): void {
       if (!confirm("确定删除该模板？删除后将从「我的模板」移除（热度榜统计不受影响）。")) return;
       if (Store.hasMine(slug)) Store.removeMine(slug);
       else Store.removeDraft(slug);
+      all = getAll(); // 关键：刷新数据源，否则 render() 用的还是删除前的旧数组
+      if (!all.length) { myTemplates(); return; } // 删空了：重建整个视图以显示空态提示
+      if (activeTag && !all.some((t: any) => (t.tags || []).includes(activeTag))) activeTag = null;
       render();
     }));
   }

@@ -8,7 +8,7 @@
 import "./tailwind.css"; // 构建期编译的 Tailwind 工具类（替代 cdn.tailwindcss.com 运行时依赖）
 
 import { ctx } from "./core/ctx.js";
-import { home, industry } from "./views/home.js";
+import { home, industry, templateLibrary } from "./views/home.js";
 import { detail } from "./views/detail.js";
 import { myTemplates } from "./views/my.js";
 import { settings } from "./views/settings.js";
@@ -28,7 +28,13 @@ function route(): void {
   const parts = h.replace(/^#\//, "").split("/");
   switch (parts[0]) {
     case "i": industry(decodeURIComponent(parts[1] || "")); break;
-    case "t": detail(decodeURIComponent(parts[1] || "")); break;
+    case "all": templateLibrary(); break;
+    case "t": {
+      // 防御：#/t 缺 slug 时（历史链接误指向此处）落到模板库，而不是打开一个空详情页报错
+      const slug = decodeURIComponent(parts[1] || "");
+      if (slug) detail(slug); else templateLibrary();
+      break;
+    }
     case "my": myTemplates(); break;
     case "settings": settings(); break;
     default: home();

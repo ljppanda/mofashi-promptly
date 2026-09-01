@@ -29,7 +29,14 @@ function findTemplate(slug: string): any {
 // 模板详情页
 export function detail(slug: string): void {
   const tpl = findTemplate(slug);
-  if (!tpl) { ctx.appEl().innerHTML = '<p>模板不存在或已失效（AI 草稿刷新后需重新生成）。</p>'; return; }
+  if (!tpl) {
+    // 注：AI 生成 / 导入的草稿是持久化在 localStorage 的（刷新不丢），
+    // 所以这里打不开通常是「已被删除」或「链接来自另一台设备」，而非刷新失效。
+    ctx.appEl().innerHTML = `<a href="#/" class="back-link">← 返回首页</a>
+      <p class="muted" style="margin-top:16px;">这个模板打不开了：它可能已被删除，或链接来自另一台设备（本工具的模板只保存在当前浏览器，不上传服务器）。</p>
+      <p class="muted" style="margin-top:8px;font-size:.8rem;">提示：AI 生成和导入的模板都会保留在「我的模板」里，刷新页面不会丢失。</p>`;
+    return;
+  }
   // 深拷贝，避免修改行业分类时污染全局种子对象或内存草稿
   ctx.current = JSON.parse(JSON.stringify(tpl));
   ctx.testMessages = []; ctx.testController = null; // 进入新模板时清空测试沙盒对话

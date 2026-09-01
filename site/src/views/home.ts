@@ -5,7 +5,7 @@ import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { ctx } from "../core/ctx.js";
 import { esc, setMeta } from "../core/ui.js";
-import { ICON } from "../core/config.js";
+import { ICON, ALL_INDUSTRIES } from "../core/config.js";
 import { handleGenerate } from "./generate.js";
 import { openPreviewModal } from "./preview.js";
 
@@ -206,13 +206,7 @@ export function home(): void {
 
     <!-- 行业宫格 -->
     <h2 class="section-title" style="margin-top:32px;">按行业浏览</h2>
-    <div class="ind-grid" style="margin-top:14px;">
-      ${inds.map(i => `<a href="#/i/${encodeURIComponent(i)}" class="ind-cell">
-        <span class="ind-emoji">${iconFor(i)}</span>
-        <span class="ind-name">${esc(i)}</span>
-        <span class="ind-count">${countFor(i)} 个</span>
-      </a>`).join("")}
-    </div>
+    ${indGridHtml()}
 
     <h2 class="section-title" style="margin-top:32px;">全部模板</h2>
     <div id="list" class="tpl-grid" style="margin-top:16px;"></div>
@@ -307,4 +301,70 @@ export function industry(name: string): void {
   `;
   const gb = (document.getElementById("ind-gen") as HTMLButtonElement | null);
   if (gb) gb.addEventListener("click", () => { setPendingIndustry(name); location.hash = "#/"; });
+}
+
+// 行业宫格（首页「按行业浏览」与模板库共用，避免两处各写一份）
+export function indGridHtml(): string {
+  return `<div class="ind-grid" style="margin-top:14px;">
+      ${industries().map(i => `<a href="#/i/${encodeURIComponent(i)}" class="ind-cell">
+        <span class="ind-emoji">${iconFor(i)}</span>
+        <span class="ind-name">${esc(i)}</span>
+        <span class="ind-count">${countFor(i)} 个</span>
+      </a>`).join("")}
+    </div>`;
+}
+
+// 按行业分组铺开模板（模板库页用）；行业顺序沿用 ALL_INDUSTRIES，未收录的排最后
+function groupedByIndustryHtml(list: any[]): string {
+  const groups: Record<string, any[]> = {};
+  list.forEach(t => {
+    const k = t.industry || "其他";
+    (groups[k] = groups[k] || []).push(t);
+  });
+  const order = ALL_INDUSTRIES.slice();
+  const keys = Object.keys(groups).sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b, "zh");
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+  return keys.map(k => `
+    <section class="mt-5">
+      <h2 class="section-title" style="font-size:1.05rem;display:flex;align-items:center;gap:8px;">
+        <span>${iconFor(k)}</span><span>${esc(k)}</span>
+        <span class="muted" style="font-size:.78rem;font-weight:600;">${groups[k].length} 个</span>
+      </h2>
+      <div class="tpl-grid" style="margin-top:10px;">${groups[k].map(card).join("")}</div>
+    </section>`).join("");
+}
+
+// 模板库：全部内置模板的统一浏览入口（导航栏「📚 模板库」指向 #/all）
+// 注意：早期导航链接写成了 #/t（缺 slug），会被当成详情页打开而报“模板打不开”，故独立为 all 路由。
+export function templateLibrary(): void {
+  setMeta("模板库 · 模法师 Promptly", `浏览全部 ${TEMPLATES.length} 个内置提示词模板，按行业与关键词查找。`);
+  ctx.appEl().innerHTML = `
+    <a href="#/" class="back-link" onclick="goBack();return false;">← 返回</a>
+    <h1 class="section-title" style="font-size:1.7rem;margin-top:10px;">📚 模板库</h1>
+    <p class="muted" style="font-size:.82rem;margin-top:6px;">共 ${TEMPLATES.length} 个内置模板。点任一张卡片即可填写变量、生成成品提示词；这些模板同时作为 AI 生成时的检索参考。</p>
+    <h2 class="section-title" style="margin-top:24px;">按行业浏览</h2>
+    ${indGridHtml()}
+    <h2 class="section-title" style="margin-top:28px;">全部模板</h2>
+    <input id="lib-search" class="input" style="margin-top:10px;" placeholder="搜索标题 / 简介 / 行业 / 标签…" aria-label="搜索模板" />
+    <div id="lib-list" style="margin-top:14px;"></div>
+  `;
+  const render = (q: string) => {
+    const kw = (q || "").trim().toLowerCase();
+    const list = TEMPLATES.filter(t => !kw
+      || (t.title + t.summary + t.industry + t.task + (t.tags || []).join(" ")).toLowerCase().includes(kw));
+    const el = (document.getElementById("lib-list") as HTMLElement);
+    if (!el) return;
+    // 无关键词时按行业分组铺开；搜索时平铺结果（分组对搜索结果没有意义）
+    el.innerHTML = list.length
+      ? (kw ? `<div class="tpl-grid">${list.map(card).join("")}</div>` : groupedByIndustryHtml(list))
+      : '<p class="muted">没有匹配的模板。</p>';
+  };
+  render("");
+  (document.getElementById("lib-search") as HTMLInputElement)
+    ?.addEventListener("input", e => render((e.target as HTMLInputElement).value));
 }
