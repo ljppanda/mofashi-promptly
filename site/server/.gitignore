@@ -4,3 +4,33 @@ data/*.db
 data/lancedb/
 *.log
 .DS_Store
+
+# 临时调试产物（探针脚本与命令输出转储，勿提交）
+/*.stdout
+/*.stderr
+/*_RESULT.txt
+/*_RESULT*.txt
+/verify_*.mjs
+/debug_*.mjs
+/check_*.mjs
+/list_*.mjs
+/probe_*.mjs
+/inspect_*.mjs
+/fetch-snoop*.mjs
+/env_*.txt
+/p0_*.txt
+/p1_*.txt
+/p2_*.txt
+/tsx_help.txt
+/curl_health.txt
+/tests_tail.txt
+/LS_*.txt
+/INSPECT_*.txt
+/P0_*.txt
+/P1_*.txt
+/P2_*.txt
+
+# 探测/调试产物（团队排查 LangSmith 链路时产生）
+/_*.log
+/facets.json
+/tmp_*.mjs
