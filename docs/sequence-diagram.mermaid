@@ -1,0 +1,92 @@
+%% F1 生成（后端 Agent，含节点级 token）
+sequenceDiagram
+  participant FE as 前端 generateViaAgent
+  participant IDX as index.ts /agent/generate
+  participant AG as agent.ts runAgent
+  participant LS as langsmith.ts
+  participant LSCloud as LangSmith API
+
+  FE->>IDX: POST /agent/generate (SSE)
+  IDX->>AG: runAgent(input, events)
+  AG->>LS: withTrace("agent:generate", {industry, sentence})
+  LS->>LSCloud: POST /runs (chain, parent=null)
+  LSCloud-->>LS: runId(rootId)
+  Note over AG: buildGraph(...lsParentRunId: rootId)
+  AG->>LS: lsStart("X·model·llm","llm",{provider,model}, rootId)
+  LSCloud-->>LS: childId(clarify)
+  AG->>AG: chatStream → usage
+  AG->>LS: lsEnd(childId, {usage, lsModelMetadata:{ls_provider,ls_model_name,ls_model_type}})
+  LS->>LSCloud: PATCH /runs/:id (outputs.usage_metadata + extra.metadata.{ls_provider,ls_model_name,ls_model_type,usage_metadata})
+  Note over AG: retrieve/draft/validate/finalize 依次同上（各自 childId）
+  AG->>LS: lsEnd(rootId, {outputs:{title,industry}})
+  LSCloud-->>LS: ok
+  AG-->>IDX: 完成
+  IDX-->>FE: SSE result / usage
+
+%% ---------------------------------------------------------
+%% F2 代写（后端，首稿 + 自检改写两次调用）
+sequenceDiagram
+  participant FE as 前端 useTemplateViaAgent
+  participant IDX as index.ts /agent/use
+  participant AG as agent.ts runAgentUse
+  participant LS as langsmith.ts
+  participant LSCloud as LangSmith API
+
+  FE->>IDX: POST /agent/use (SSE)
+  IDX->>AG: runAgentUse(input, events)
+  AG->>LS: withTrace("agent:use", {template, goal})
+  LSCloud-->>LS: rootId
+  rect rgb(240,245,255)
+    Note over AG: ① 首稿 chatStream
+    AG->>LS: lsStart("·llm", "llm", {...}, rootId)
+    AG->>AG: chatStream → usage(first)
+    AG->>LS: lsEnd(child1, {usage})
+  end
+  rect rgb(255,245,240)
+    Note over AG: ② 自检改写 chatStream（补埋点，lsRunName 覆盖为 ·llm#selfcheck）
+    AG->>LS: lsStart("…·llm#selfcheck", "llm", {...}, rootId)
+    AG->>AG: chatStream → usage(second)
+    AG->>LS: lsEnd(child2, {usage, lsModelMetadata})
+  end
+  AG->>LS: lsEnd(rootId, {outputs:{promptLength}})
+
+%% ---------------------------------------------------------
+%% F13 评测（前端直连 → 批量上报端点）
+sequenceDiagram
+  participant FE as 前端 judge.ts
+  participant LLM as llm.ts (relayFetch 直连厂商)
+  participant VEND as 厂商 API（直连）
+  participant API as index.ts /agent/trace
+  participant TR as trace.ts
+  participant LS as langsmith.ts
+  participant LSCloud as LangSmith API
+
+  FE->>LLM: useTemplate(template, goal)
+  LLM->>VEND: 浏览器直连 fetch（或经 /relay 透传）
+  VEND-->>LLM: {text, usage}
+  LLM-->>FE: {prompt, usage}
+  FE->>API: fire-and-forget POST /agent/trace {flow:"llm:instantiate", calls:[{provider,model,usage}]}
+  Note over FE: 不 await；失败 .catch(()=>{})
+
+  FE->>LLM: chatWithPrompt(finalPrompt, [goal])  %% 被测模型
+  LLM->>VEND: 直连
+  VEND-->>LLM: {text, usage, elapsedMs}
+  LLM-->>FE: {text, usage, elapsedMs}
+  FE->>API: POST /agent/trace {flow:"llm:run", label:"被测模型", calls:[...]}
+
+  FE->>LLM: chatWithPrompt(JUDGE_SYSTEM, [user])  %% 裁判模型
+  LLM->>VEND: 直连
+  VEND-->>LLM: {text, usage}
+  LLM-->>FE: {text, usage}
+  FE->>API: POST /agent/trace {flow:"judge:eval", label:"裁判模型", calls:[...]}
+
+  API->>TR: parseTraceReport(body)  %% 默认 PUBLIC_FLOWS 白名单收窄
+  TR-->>API: TraceReport
+  API->>TR: emitTraceReport(rep)
+  TR->>LS: lsStart(flow,"chain",{label?,metadata})
+  loop 每个 call
+    TR->>LS: lsStart(call.name||`${provider}·${model}·llm`, "llm", {provider,model}, parentId)
+    TR->>LS: lsEnd(childId, {usage, lsModelMetadata: toLsModelMetadata(provider,model)})
+  end
+  TR->>LS: lsEnd(parentId, {outputs:{callCount}})
+  API-->>FE: {ok:true}

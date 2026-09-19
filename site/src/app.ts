@@ -12,6 +12,7 @@ import { home, industry, templateLibrary } from "./views/home.js";
 import { detail } from "./views/detail.js";
 import { myTemplates } from "./views/my.js";
 import { settings } from "./views/settings.js";
+import { stats } from "./views/stats.js";
 import { openImportFile } from "./views/import.js";
 
 function route(): void {
@@ -36,6 +37,7 @@ function route(): void {
       break;
     }
     case "my": myTemplates(); break;
+    case "stats": stats(); break;
     case "settings": settings(); break;
     default: home();
   }

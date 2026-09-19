@@ -1,0 +1,69 @@
+classDiagram
+  class langsmith {
+    +LS_ENABLED: boolean
+    +lsStart(name, runType, inputs, parentRunId?, metadata?): Promise~string|null~
+    +lsEnd(id, opts?): Promise~void~
+    +withTrace(name, metadata, fn): Promise~T~
+    +recordProviderAttempt(provider, model, ok, elapsedMs, err?): void
+    +recordFailover(ok): void
+    -ensureProject(): Promise~string|null~
+    -projectId: string|null
+    -projectPromise: Promise~string|null~|null
+  }
+  class trace {
+    +PUBLIC_FLOWS: readonly string[]
+    +TRACE_FLOWS: readonly string[]
+    +parseTraceReport(raw, allowed?): TraceReport|null
+    +toUsageMetadata(u): UsageMetadata|undefined
+    +toLsModelMetadata(provider, model): object
+    +emitTraceReport(rep, deps?): Promise~void~
+  }
+  class TraceDeps {
+    +lsStart(...): Promise~string|null~
+    +lsEnd(...): Promise~void~
+  }
+  class Usage {
+    +inputTokens: number
+    +outputTokens: number
+    +cacheReadTokens: number
+    +cacheCreateTokens: number
+    +totalTokens: number
+  }
+  class TraceReport {
+    +flow: string
+    +label?: string
+    +metadata?: object
+    +calls: TraceCall[]
+  }
+  class TraceCall {
+    +name?: string
+    +provider: string
+    +model: string
+    +usage?: Partial~Usage~
+    +elapsedMs?: number
+    +error?: string
+  }
+  class agent_ts {
+    +runAgent(input, events, signal)
+    +runAgentUse(input, events, signal)
+    +runAgentClarify(input, events, signal)
+    +runAgentRefine(input, events, signal)
+  }
+  class providers_ts {
+    +chatStream(opts): Promise~ChatResult~
+    +chatWithTools(opts): Promise~ToolResult~
+  }
+  class index_ts {
+    +handleAgentTrace(req, res)
+    +handleRelay(req, res)
+    +handleAgentGenerate/Use/Clarify/Refine(...)
+  }
+
+  agent_ts ..> langsmith : uses lsStart/lsEnd/withTrace
+  providers_ts ..> langsmith : uses lsStart/lsEnd
+  index_ts ..> trace : delegates /agent/trace
+  trace ..> langsmith : calls lsStart/lsEnd
+  trace ..> Usage : maps
+  trace ..> TraceDeps : injectable (tests)
+  TraceReport *-- TraceCall
+  trace ..> TraceReport : parses

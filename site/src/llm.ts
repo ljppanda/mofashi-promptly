@@ -117,6 +117,40 @@ export const LLM = (function () {
     return c.providerLabel + " · " + c.model;
   }
 
+  // ---------- 用量上报（前端直连链路 → 本机后端 → LangSmith） ----------
+  // 背景：前端直连厂商的链路（F13 评测、在线试跑、示例预览、编辑器增强直连回退等）不经后端，
+  // 且 CSP 的 connect-src 不含 LangSmith，浏览器无法直连上报；故只把「脱敏用量摘要」POST 给
+  // 本机后端 /agent/trace，由服务端构造 LangSmith run。前端**绝不持有** LANGSMITH_API_KEY。
+  //
+  // 契约：绝不 await、绝不抛出（fire-and-forget）。失败静默，绝不影响 UI 时序与主链路。
+  // 隐私：只上报 provider / model / usage / elapsedMs；不传 Prompt 正文、API Key、厂商原始响应。
+  //
+  // @param flow  流程名（须在服务端 PUBLIC_FLOWS 白名单内，如 "llm:chat"）
+  // @param label 展示名（如「被测模型」「裁判模型」），可空
+  // @param calls 调用数组，每项 { provider, model, usage?, elapsedMs?, name?, error? }
+  // @param metadata 脱敏摘要（如 { goalLen, industry }），可空
+  function reportTrace(flow, label, calls, metadata) {
+    try {
+      fetch("/agent/trace", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ flow, label, calls, metadata }),
+      }).catch(() => {}); // 网络失败静默
+    } catch (e) { /* 同步异常静默（如 fetch 被禁用） */ }
+  }
+
+  // 便捷：把一次直连调用的 { provider, model, usage, elapsedMs } 组装成单 call 并上报。
+  // cfg 为 resolveCfg(over) 的返回值（含真实 provider key 与模型名，勿用中文 label）。
+  function reportCall(flow, cfg, res, label, metadata) {
+    const call = {
+      provider: cfg && cfg.provider,
+      model: cfg && cfg.model,
+      usage: (res && res.usage) || undefined,
+      elapsedMs: (res && typeof res.elapsedMs === "number") ? res.elapsedMs : undefined,
+    };
+    reportTrace(flow, label, [call], metadata);
+  }
+
   // 测试连接时也需要“当前生效”标签（可能基于未保存的表单）
   function labelOf(over?) {
     const c = resolveCfg(over);
@@ -156,9 +190,13 @@ export const LLM = (function () {
     };
   }
 
-  async function callChat(system, user, over?) {
+  async function callChat(system, user, over?, out?) {
     const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
+    // out（可选出参盒）：若调用方传入对象，则把本次调用的归一化 usage 回填到 out.usage，
+    // 供需要上报 token 用量的调用方（如 refinePromptDirect）读取。不传则行为与旧版完全一致（仅返回文本）。
+    // 注意：各厂商「非流式」响应体本就带 usage，此前被丢弃；此处按厂商字段就近解析（复用 normUsage 归一化）。
+    const capture = (raw) => { if (out) out.usage = raw ? normUsage(raw) : null; };
 
     if (c.style === "claude") {
       const url = c.base + "/messages";
@@ -167,6 +205,7 @@ export const LLM = (function () {
       const r = await relayFetch(url, "POST", headers, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
       const j = await r.json();
+      capture(j.usage);
       return j.content && j.content[0] && j.content[0].text;
     }
 
@@ -180,6 +219,10 @@ export const LLM = (function () {
       const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
       const j = await r.json();
+      // Gemini 非流式用量在 usageMetadata（promptTokenCount/candidatesTokenCount/totalTokenCount），
+      // 与 normUsage 的入参字段名不同，故先展开为通用结构再 capture。
+      const um = j.usageMetadata;
+      capture(um ? { inputTokens: um.promptTokenCount, outputTokens: um.candidatesTokenCount, totalTokens: um.totalTokenCount } : null);
       const txt = j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts && j.candidates[0].content.parts[0] && j.candidates[0].content.parts[0].text;
       if (!txt) throw new Error("Gemini 未返回文本：" + JSON.stringify(j).slice(0, 200));
       return txt;
@@ -197,6 +240,7 @@ export const LLM = (function () {
       const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
       const j = await r.json();
+      capture(j.usage);
       return j.result;
     }
 
@@ -207,6 +251,7 @@ export const LLM = (function () {
     const r = await relayFetch(url, "POST", headers, body);
     if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
     const j = await r.json();
+    capture(j.usage);
     return j.choices && j.choices[0].message.content;
   }
 
@@ -414,6 +459,8 @@ export const LLM = (function () {
     const obj = extractJSON(text);
     obj.slug = "gen-" + Date.now();
     obj.generated = true;
+    // 用量上报（脱敏）：llm:generate-template（非流式分支无 usage，reportCall 会自动略过）
+    reportCall("llm:generate-template", resolveCfg(), { usage, elapsedMs }, undefined, { industry });
     return { tpl: obj, usage, elapsedMs };
   }
 
@@ -425,6 +472,8 @@ export const LLM = (function () {
     try {
       const r = await callChatStream(sys, user, null, null, signal);
       const t = (r.text || "").trim();
+      // 用量上报（脱敏）：llm:prod-selfcheck（生产级自检的批判改写调用）
+      reportCall("llm:prod-selfcheck", resolveCfg(), r, undefined, { goalLen: (goal || "").length });
       return t || prompt;
     } catch (e) {
       return prompt;
@@ -436,7 +485,10 @@ export const LLM = (function () {
   // selfCheck=true 时，首稿流式结束后静默批判改写一次，逼近人工优化效果（多一次调用）。
   // 返回 { prompt, usage, elapsedMs, sources }
   // onStage(步骤key) 透出当前阶段，供前端把「直连兜底路径」也渲染成实时时间线（消除黑盒）。
-  async function useTemplate(template, goal, onToken, signal, selfCheck = false, onStage = null) {
+  // skipReport=true 时跳过本函数内的 llm:instantiate 自报——供调用方（如 F13 judgeSample）改由
+  //   自己带更丰富上下文（from:"judge" 等）上报，避免同一实例化被记两次导致 token 统计虚高。
+  //   追加为第 7 个参数且默认 false，保证所有既有调用方行为完全不变。
+  async function useTemplate(template, goal, onToken, signal, selfCheck = false, onStage = null, skipReport = false) {
     const system = `你是一名「提示词落地工程师」。基于给定提示词模板的专长与结构，写出一条【生产级、可直接复制粘贴进任意 AI 助手】的成品提示词。
 要求：
 1) 沿用模板角色设定（"你是…"），但不要留任何 {{占位}} 或"请填写"——所有占位由你根据用户目标动态写成具体、有代入感的内容（情境、关键点、示例、边界）。
@@ -459,8 +511,14 @@ export const LLM = (function () {
     if (!text) throw new Error("模型未返回提示词");
     if (selfCheck) {
       if (onStage) onStage("selfcheck");
+      // 注意（耦合关系，暂不修）：prodSelfCheck 内部会自报 llm:prod-selfcheck，且不受 skipReport 约束。
+      // 当前 judgeSample 传 selfCheck=false（F13 不触发），故无活跃重复；若将来 F13 启用 selfCheck，
+      // 需同步给 prodSelfCheck 追加 skipReport 开关，否则 judge 语境会混入一条无 from:"judge" 的自检用量。
       text = await prodSelfCheck(text, goal, signal);
     }
+    // 用量上报（脱敏）：llm:instantiate（用模板实例化成品提示词）。
+    // 若调用方声明 skipReport（如 F13 judgeSample）则跳过，由调用方带评测上下文统一上报，避免双报。
+    if (!skipReport) reportCall("llm:instantiate", resolveCfg(), { usage: r.usage, elapsedMs: r.elapsedMs }, undefined, { industry: template && template.industry, goalLen: (goal || "").length });
     return { prompt: text, usage: r.usage, elapsedMs: r.elapsedMs, sources: [] };
   }
 
@@ -468,13 +526,19 @@ export const LLM = (function () {
   // prompt 已是完整提示词正文，以 user 消息发送，system 留空让提示词自身定义角色/任务。
   async function runPrompt(prompt, onToken, signal) {
     if (!prompt || !prompt.trim()) throw new Error("没有可运行的提示词");
-    return await callChatStream("", prompt, onToken, null, signal);
+    const res = await callChatStream("", prompt, onToken, null, signal);
+    // 用量上报（脱敏）：llm:preview（「在线试跑/示例预览」把成品提示词直接发给模型看效果）
+    reportCall("llm:preview", resolveCfg(), res, undefined, { promptLen: (prompt || "").length });
+    return res;
   }
 
   // 测试沙盒：把整条提示词作为"系统设定"，与用户多轮对话。
   // messages: {role:"user"|"assistant", content:string}[]（不含 system，最后一条必为当前 user 问题）
   // 逐厂商构造完整 messages（含 system=提示词 + 历史上下文），返回 {text, usage, elapsedMs}
-  async function chatWithPrompt(promptText, messages, onToken, signal, over = {}) {
+  // skipReport=true 时跳过本函数内的 llm:chat 自报——供调用方（如 F13 judgeSample）改由自己带评测语境
+  //   （from:"judge"、跨厂商 provider/model 归因）统一上报，避免同一份 usage 被记两次导致 token 虚高。
+  //   追加为第 6 个参数且默认 false，保证所有既有调用方（detail/preview）行为完全不变。
+  async function chatWithPrompt(promptText, messages, onToken, signal, over = {}, skipReport = false) {
     const c = resolveCfg(over);
     if (!c.key) throw new Error("未配置 API Key，请先到「设置」页填写。");
     if (!promptText || !promptText.trim()) throw new Error("没有可测试的提示词，请先生成。");
@@ -510,7 +574,12 @@ export const LLM = (function () {
       const body = { model: c.model, temperature: 0.7, stream: true, messages: [{ role: "system", content: promptText }, ...hist.map(m => ({ role: m.role, content: m.content }))] };
       res = await streamOpenAI(url, headers, body, onToken, signal);
     }
-    return { text: res.text, usage: res.usage, elapsedMs: Date.now() - start };
+    const out = { text: res.text, usage: res.usage, elapsedMs: Date.now() - start };
+    // 用量上报（脱敏）：llm:chat（多轮对话沙盒 / F13 评测的被测模型、裁判模型均复用本函数）。
+    // 使用 resolveCfg(over) 的真实 provider key 与模型名（跨厂商裁判场景可正确归因）。
+    // 若调用方声明 skipReport（如 F13 judgeSample）则跳过，由调用方带评测上下文统一上报，避免双报。
+    if (!skipReport) reportCall("llm:chat", c, out, undefined, { msgCount: hist.length });
+    return out;
   }
 
   // 测试连接：用当前设置（或传入的表单覆盖参数）发一次极简请求，验证 Key / 模型有效
@@ -642,7 +711,8 @@ export const LLM = (function () {
     };
   }
 
-  // F1 via Agent：返回 { tpl, usage, elapsedMs }；onNode(name) 透出状态机节点事件（clarify/retrieve/draft/validate/finalize）；onContext(refs) 透出 RAG 召回的参考范例
+  // F1 via Agent：返回 { tpl, usage, usages, elapsedMs }；onNode(name) 透出状态机节点事件（clarify/retrieve/draft/validate/finalize）；onContext(refs) 透出 RAG 召回的参考范例
+  // usage：向后兼容字段，取最后一个节点的用量（保持原有消费方 views/generate.ts 行为不变）；usages：节点级明细数组，每个元素形如 { node, inputTokens, outputTokens, cacheReadTokens?, cacheCreateTokens?, totalTokens? }
   async function generateViaAgent(industry, sentence, onToken, onNode, signal, onContext, onThink) {
     const { provider, model, apiKey, apiSecret, proxyBase } = agentPayload();
     const key = apiKey;
@@ -653,6 +723,7 @@ export const LLM = (function () {
     });
     if (!r.ok) { const t = await r.text().catch(() => ""); throw new Error("Agent 生成失败 " + r.status + "：" + t.slice(0, 200)); }
     let tpl = null, usage = null;
+    const usages: any[] = []; // 节点级用量明细：每个节点一次 usage 事件，全部保留（不再只留最后一个）
     await readAgentSSE(r, (name, data) => {
       if (name === "token" && onToken) onToken(data && data.text, false);
       else if (name === "meta") { if (onNode) onNode("meta"); }
@@ -660,15 +731,16 @@ export const LLM = (function () {
       else if (name === "context" && data && onContext) { onContext(data); }
       else if (name === "think" && data && onThink) { onThink(data.text, data.kind); }
       else if (name === "result") { tpl = data; tpl.slug = "gen-" + Date.now(); tpl.generated = true; }
-      else if (name === "usage") usage = data;
+      else if (name === "usage") { if (data) { usages.push(data); usage = data; } }
       else if (name === "error") throw new Error((data && data.message) || "Agent 出错");
     }, signal);
     if (onToken) onToken("", true);
     if (!tpl) throw new Error("Agent 未返回模板");
-    return { tpl, usage, elapsedMs: 0 };
+    return { tpl, usage, usages, elapsedMs: 0 };
   }
 
-  // F2 via Agent：用模板生成成品提示词（模型代写）。返回 { prompt, usage, elapsedMs, sources }
+  // F2 via Agent：用模板生成成品提示词（模型代写）。返回 { prompt, usage, usages, elapsedMs, sources }
+  // usage：向后兼容字段，取最后一个节点的用量；usages：节点级明细数组（首稿 + 自检改写等每一步各一条）
   async function useTemplateViaAgent(template, goal, onToken, onNode, signal, onContext, onThink) {
     const { provider, model, apiKey, apiSecret, proxyBase } = agentPayload();
     const key = apiKey;
@@ -679,6 +751,7 @@ export const LLM = (function () {
     });
     if (!r.ok) { const t = await r.text().catch(() => ""); throw new Error("Agent 生成失败 " + r.status + "：" + t.slice(0, 200)); }
     let prompt = null, usage = null, sources = [];
+    const usages: any[] = []; // 节点级用量明细：全部保留（不再只留最后一个）
     await readAgentSSE(r, (name, data) => {
       if (name === "token" && onToken) onToken(data && data.text, false);
       else if (name === "meta") { if (onNode) onNode("meta"); }
@@ -686,12 +759,12 @@ export const LLM = (function () {
       else if (name === "context" && data && onContext) { onContext(data); }
       else if (name === "think" && data && onThink) { onThink(data.text, data.kind); }
       else if (name === "result") { prompt = data.prompt; sources = data.sources || []; }
-      else if (name === "usage") usage = data;
+      else if (name === "usage") { if (data) { usages.push(data); usage = data; } }
       else if (name === "error") throw new Error((data && data.message) || "Agent 出错");
     }, signal);
     if (onToken) onToken("", true);
     if (prompt == null) throw new Error("Agent 未返回提示词");
-    return { prompt, usage, elapsedMs: 0, sources };
+    return { prompt, usage, usages, elapsedMs: 0, sources };
   }
 
   // F3 via Agent：交互式访谈澄清（SSE 流式，复用 node/think/result 事件）。
@@ -750,7 +823,10 @@ export const LLM = (function () {
     const system = `你是提示词优化器。根据用户给出的原提示词与测试反馈，输出改进思路与改写后的【完整提示词全文】。保留好的部分，针对反馈具体改写。先写 3-6 条改进思路，然后用一行分隔符 ----PROMPT---- 隔开，再输出完整提示词正文（不要代码块围栏）。`;
     const user = `【原提示词】\n${origPrompt}\n\n【用户反馈】\n${feedback}` +
       (convText ? `\n\n【测试对话】\n${convText}` : "") + `\n\n请先给改进思路，再用 ----PROMPT---- 分隔并输出完整提示词。`;
-    const text = await callChat(system, user, signal);
+    const start = Date.now();
+    const box: any = { usage: null }; // 出参盒：callChat 解析出的归一化 usage 会写入 box.usage
+    const text = await callChat(system, user, undefined, box);
+    const elapsedMs = Date.now() - start;
     const idx = (text || "").indexOf("----PROMPT----");
     const thinkPart = idx >= 0 ? text.slice(0, idx).trim() : (text || "").trim();
     const promptPart = idx >= 0 ? text.slice(idx + 13).trim() : (text || "").trim();
@@ -758,6 +834,10 @@ export const LLM = (function () {
     if (onNode) onNode("rewrite");
     if (onToken) onToken(promptPart, true);
     if (!promptPart) throw new Error("改写未返回提示词");
+    // 用量上报（脱敏）：llm:refine-direct（服务端 /agent/refine 不可用时的浏览器直连改写回退）。
+    // callChat 现已把非流式响应里的 usage 归一化回填到 box.usage；若某厂商响应不含 usage，则 box.usage 为 null，
+    // reportCall 会自动略过 usage 仅记耗时/模型（不硬编造数字）。
+    reportCall("llm:refine-direct", c, { usage: box.usage, elapsedMs }, undefined, { promptLen: (origPrompt || "").length });
     return { prompt: promptPart };
   }
 
@@ -775,10 +855,13 @@ export const LLM = (function () {
     const r = await callChatStream(system, user, onToken || null, over, signal);
     const prompt = (r.text || "").trim();
     if (!prompt) throw new Error("优化未返回提示词");
-    return { prompt };
+    // 用量上报（脱敏）：llm:optimize。原实现丢弃了 usage，此处保留 usage/elapsedMs 一并返回，
+    // 并据此上报（供「统计链路每个流程用了多少 token」的核心诉求）。
+    reportCall("llm:optimize", c, r, undefined, { promptLen: (origPrompt || "").length });
+    return { prompt, usage: r.usage, elapsedMs: r.elapsedMs };
   }
 
   // 社区分享 / 账号 / 可观测 相关函数已全部裁剪（个人本地工具，无服务端账号与社区）。
 
-  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt };
+  return { PROVIDERS, effectiveLabel, labelOf, callChat, callChatStream, testConnection, listModels, generateTemplate, generateViaAgent, useTemplateViaAgent, clarifyViaAgent, useTemplate, runPrompt, chatWithPrompt, refinePrompt, refinePromptDirect, optimizePrompt, reportTrace, reportCall, resolveCfg };
 })();

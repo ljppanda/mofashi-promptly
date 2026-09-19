@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+
+# 临时调试产物（探针脚本与命令输出转储，勿提交）
+*.stdout
+*.stderr
+verify_*.mjs
+debug_*.mjs
+check_*.mjs
+probe_*.mjs
+P0_*.txt
+P1_*.txt
+P2_*.txt
+P3_*.txt
+*_RESULT*.txt

@@ -4,7 +4,7 @@
 // 对外契约保持：runAgent(input, events, signal) + 输出模板结构与前端口径一致（title/industry/task/summary/variables/prompt）。
 
 import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
-import { chatStream, providerOf, chatWithTools, type Usage } from "./providers.js";
+import { chatStream, providerOf, labelOf, runNameOf, chatWithTools, type Usage } from "./providers.js";
 import { retrieve, retrieveToolSpec, type RagRef, type RagResult } from "./rag.js";
 import { withTrace, lsEnd } from "./langsmith.js";
 import { getPrompt } from "./prompts.js";
@@ -260,7 +260,7 @@ export async function runAgent(
 ): Promise<void> {
   events.onNode?.("meta");
   try {
-    await withTrace("agent:generate", { industry: input.industry, sentence: input.sentence }, async (rootId) => {
+    await withTrace("agent:generate", { industry: input.industry, sentence: input.sentence, flow: "agent:generate" }, async (rootId) => {
       const app = await buildGraph({ ...input, lsParentRunId: rootId }, events, signal).invoke({
         industry: input.industry,
         sentence: input.sentence,
@@ -334,7 +334,8 @@ export async function runAgentUse(
   signal?: AbortSignal,
 ): Promise<void> {
   try {
-    await withTrace("agent:use", { template: input.template.title, goal: input.goal }, async (rootId) => {
+    await withTrace("agent:use", { template: input.template.title, goal: input.goal, flow: "agent:use" }, async (rootId) => {
+      let selfcheckRan = false; // 自检改写是否实际执行（供父 chain run 输出标注）
       // ① 检索范例：让模型代写有依据
       events.onNode?.("retrieve");
       const rag = await retrieve(input.industry, input.goal || input.template.title);
@@ -370,6 +371,8 @@ export async function runAgentUse(
       events.onUsage?.(res.usage);
 
       // ③ 自检回路：对照生产级清单批判首稿并改写一次（静默，不影响流式），失败回退首稿
+      // 首稿 usage 已由 providers.ts 的 chatStream 随子 llm run 上报；
+      // selfcheck 调用同理会建一条子 llm run（同父 rootId，名字加 #selfcheck 后缀区分）。
       events.onNode?.("selfcheck");
       let prompt = (res.text || "").trim();
       if (!prompt) {
@@ -385,10 +388,12 @@ export async function runAgentUse(
         const sc = await chatStream({
           provider: input.provider, model: input.model, apiKey: input.apiKey,
           apiSecret: input.apiSecret, proxyBase: input.proxyBase, lsParentRunId: rootId,
+          lsRunName: runNameOf(input.provider, input.model) + "#selfcheck",
           system: scSys, user: scUser, onToken: undefined,
           onReasoning: (t) => events.onThink?.(t, "reasoning"),
           signal,
         });
+        selfcheckRan = true;
         const improved = (sc.text || "").trim();
         if (improved) prompt = improved;
       } catch (e) {
@@ -399,7 +404,7 @@ export async function runAgentUse(
       // ④ 定稿
       events.onNode?.("finalize");
       events.onResult?.({ prompt, sources: rag.refs });
-      await lsEnd(rootId, { outputs: { promptLength: prompt.length } });
+      await lsEnd(rootId, { outputs: { promptLength: prompt.length, selfcheckRan } });
     });
   } catch (err) {
     events.onError?.(err instanceof Error ? err.message : String(err));
@@ -486,7 +491,7 @@ export async function runAgentClarify(input: AgentClarifyInput, events?: AgentCl
   events?.onNode?.("clarify");
   events?.onThink?.("🔍 正在分析你的目标，并结合模板定位，识别还缺哪些关键信息（受众 / 形式 / 约束 / 语气等）…");
 
-  return withTrace("agent:clarify", { template: input.template.title, goal: input.goal, historyLen: (input.history || []).length }, async (rootId) => {
+  return withTrace("agent:clarify", { template: input.template.title, goal: input.goal, historyLen: (input.history || []).length, flow: "agent:clarify" }, async (rootId) => {
     try {
       const res = await chatStream({
         provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
@@ -583,40 +588,56 @@ export async function runAgentRefine(input: AgentRefineInput, events?: AgentRefi
     `【当前提示词全文】\n${input.prompt}\n\n【用户不满意的地方 / 希望改进的点】\n${input.feedback}` +
     (conv ? `\n\n【实际测试对话（模型按上面提示词作答，对照看看问题出在哪）】\n${conv}` : "");
 
-  // ① 分析不足（非流式，整段一次性展示为思考）
-  events?.onNode?.("analyze");
-  events?.onThink?.("🧐 正在对照你的反馈与实际测试表现，定位原提示词的具体不足…");
-  let analysis = "";
-  try {
-    const aRes = await chatStream({
-      provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
-      proxyBase: input.proxyBase, system: getPrompt("refine_analyze", input.promptVersions?.refine_analyze), user: baseUser, signal,
-    });
-    events?.onUsage?.(aRes.usage);
-    analysis = (aRes.text || "").trim();
-    events?.onThink?.(analysis || "（未给出明确分析，直接进入改写）");
-  } catch (err) {
-    events?.onThink?.("⚠️ 分析阶段异常，直接进入改写：" + String((err as any)?.message || err));
-  }
+  return withTrace(
+    "agent:refine",
+    { feedbackLen: (input.feedback || "").length, convLen: (input.conversation || []).length, flow: "agent:refine" },
+    async (rootId): Promise<string> => {
+      // ① 分析不足（非流式，整段一次性展示为思考）
+      events?.onNode?.("analyze");
+      events?.onThink?.("🧐 正在对照你的反馈与实际测试表现，定位原提示词的具体不足…");
+      let analysis = "";
+      try {
+        const aRes = await chatStream({
+          provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
+          proxyBase: input.proxyBase, lsParentRunId: rootId,
+          system: getPrompt("refine_analyze", input.promptVersions?.refine_analyze), user: baseUser, signal,
+        });
+        events?.onUsage?.(aRes.usage);
+        analysis = (aRes.text || "").trim();
+        events?.onThink?.(analysis || "（未给出明确分析，直接进入改写）");
+      } catch (err) {
+        events?.onThink?.("⚠️ 分析阶段异常，直接进入改写：" + String((err as any)?.message || err));
+      }
 
-  // ② 改写提示词（流式输出新版全文）
-  events?.onNode?.("rewrite");
-  events?.onThink?.("✍️ 根据分析要点，正在改写提示词…");
-  const sysRewrite = getPrompt("refine_rewrite", input.promptVersions?.refine_rewrite) +
-    (analysis ? `\n\n【改写要点（已分析得出，请逐条落实）】\n${analysis}` : "");
-  const res = await chatStream({
-    provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
-    proxyBase: input.proxyBase, system: sysRewrite, user: baseUser + `\n\n请输出改写后的完整提示词全文。`, onToken: events?.onToken,
-    onReasoning: (t) => events?.onThink?.(t, "reasoning"), signal,
-  });
-  events?.onUsage?.(res.usage);
-  const prompt = (res.text || "").trim();
-  if (!prompt) {
-    const msg = "模型未返回改写后的提示词";
-    events?.onError?.(msg);
-    return "";
-  }
-  events?.onThink?.("✅ 已生成改写版提示词，请在下方审阅并决定是否采用。");
-  events?.onResult?.({ prompt });
-  return prompt;
+      // ② 改写提示词（流式输出新版全文）
+      events?.onNode?.("rewrite");
+      events?.onThink?.("✍️ 根据分析要点，正在改写提示词…");
+      const sysRewrite = getPrompt("refine_rewrite", input.promptVersions?.refine_rewrite) +
+        (analysis ? `\n\n【改写要点（已分析得出，请逐条落实）】\n${analysis}` : "");
+      let res;
+      try {
+        res = await chatStream({
+          provider: input.provider, model: input.model, apiKey: input.apiKey, apiSecret: input.apiSecret,
+          proxyBase: input.proxyBase, lsParentRunId: rootId,
+          system: sysRewrite, user: baseUser + `\n\n请输出改写后的完整提示词全文。`, onToken: events?.onToken,
+          onReasoning: (t) => events?.onThink?.(t, "reasoning"), signal,
+        });
+      } catch (err) {
+        // 改写失败：子 llm run 已在 providers 层结掉；父 chain run 由 withTrace 统一结为 error，这里直接上抛。
+        throw err;
+      }
+      events?.onUsage?.(res.usage);
+      const prompt = (res.text || "").trim();
+      if (!prompt) {
+        const msg = "模型未返回改写后的提示词";
+        events?.onError?.(msg);
+        await lsEnd(rootId, { error: msg });
+        return "";
+      }
+      events?.onThink?.("✅ 已生成改写版提示词，请在下方审阅并决定是否采用。");
+      events?.onResult?.({ prompt });
+      await lsEnd(rootId, { outputs: { promptLength: prompt.length, provider: labelOf(input.provider, input.model) } });
+      return prompt;
+    },
+  );
 }

@@ -20,6 +20,19 @@ export function fmtUsage(u: any, ms: number): string {
   return p.join(" · ");
 }
 
+// 节点级 token 用量分配明细：把每个 Agent 节点的用量规整为「节点名 输入X/输出Y」，用 · 连接。
+// usages 为空 / 非法时返回空串，调用方据此静默降级（不渲染空行、不报错）。
+// node 缺失时降级为「节点」占位，保证任意后端版本都能渲染。
+export function fmtUsageByNode(usages: any[]): string {
+  if (!Array.isArray(usages) || usages.length === 0) return "";
+  const parts = usages.map((u) => {
+    if (!u || typeof u !== "object") return "";
+    const name = u.node ? String(u.node) : "节点";
+    return name + " 输入" + (u.inputTokens || 0) + "/输出" + (u.outputTokens || 0);
+  }).filter(Boolean);
+  return parts.join(" · ");
+}
+
 // 热度指标上报（原后端 /metrics 端点已随社区能力一并移除，这里降级为无操作，
 // 保留函数签名，避免改动调用方——本地个人工具不再上报任何远程指标）。
 export function metricBump(id: string, type: string, delta: number, title: string, industry: string): void {
@@ -95,6 +108,37 @@ export function fmtDateTime(ts: number): string {
   const d = new Date(ts);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// ---------- 用量看板（T-04）格式化辅助 ----------
+// 设计原则：任何「上游缺失」都显示「—」，绝不用 0 冒充真实零值（0 会让用户误判为零消耗）。
+
+// 千分位整数（如 34567 → "34,567"）。null/undefined/非有限数 → "—"。
+export function fmtInt(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
+
+// 成本格式化：$ + 4 位小数（额度可能极小）。null/undefined/非有限数 → "—"。
+export function fmtCost(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return "$" + n.toFixed(4);
+}
+
+// 时延格式化：入参单位是「秒」。null/undefined/非有限数 → "—"。
+// < 60s → "25.3s"；>= 60s → "1m5s"。0 有效（显示 "0.0s"）。
+export function fmtLatency(sec: number | null | undefined): string {
+  if (sec == null || !Number.isFinite(sec)) return "—";
+  if (sec < 60) return sec.toFixed(1) + "s";
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec - m * 60);
+  return m + "m" + s + "s";
+}
+
+// 比率（0~1）→ 百分比字符串（如 0.0909 → "9.1%"）。null/undefined/非有限数 → "—"。
+export function fmtPct(rate: number | null | undefined): string {
+  if (rate == null || !Number.isFinite(rate)) return "—";
+  return (rate * 100).toFixed(1) + "%";
 }
 
 // 相对时间（"X 分钟前 / X 小时前 / X 天前"），用于社区新鲜度信号

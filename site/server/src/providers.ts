@@ -4,6 +4,7 @@
 // 设计：绝大多数为 OpenAI 兼容；Claude / Gemini / 文心 走各自原生协议。
 
 import { recordProviderAttempt, recordFailover, LS_ENABLED, lsStart, lsEnd } from "./langsmith.js";
+import { toLsModelMetadata } from "./trace.js";
 
 export type Style = "openai" | "claude" | "gemini" | "ernie";
 
@@ -80,6 +81,7 @@ export interface ChatOpts {
   signal?: AbortSignal;
   proxyBase?: string; // 用户若开启代理，服务端模型调用也走该代理的 /relay（避免服务端直连被墙导致 agent 失败回落）
   lsParentRunId?: string | null; // LangSmith：父 run id，每次模型调用会建一条子 run 上报
+  lsRunName?: string;            // LangSmith：覆盖子 run 名（默认 `runNameOf(provider,model)` = `providerId·model·llm`）；同一父下多次同名调用（如自检/重试）可传后缀名避免视图合并，如 `...·llm#selfcheck`
   // —— 韧性（P1 收尾）——
   maxRetries?: number;          // 覆盖默认重试次数（默认读 LLM_MAX_RETRIES，再默认 2）
   fallback?: FallbackSpec[];    // 主 provider 用尽重试仍失败时的主备切换列表（单发，不级联重试）
@@ -346,10 +348,17 @@ export function resolveFallbacks(): FallbackSpec[] {
   });
 }
 
-// 单次模型调用（不含重试/主备，不含指标）：超时 + 协议分发。本地个人工具不接 LangSmith/运营指标。
-async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
+// 单次模型调用（不含重试/主备，不含指标）：超时 + 协议分发。
+// LangSmith：每次真实模型调用建一条子 llm run（父 = opts.lsParentRunId），
+//   成功/失败（含超时、协议错误、HTTP 非 2xx）都必须结 run，绝不留悬挂 run。
+//   run 名 = `${providerLabel}·${model}·llm`（§8 命名规范），failover 时各建一条，
+//   平台即可看出「主 provider 失败 → 备 provider 成功」。
+async function chatPrimary(opts: ChatOpts, childName: string): Promise<ChatResult> {
   const p = providerOf(opts.provider);
   const t0 = Date.now();
+  const childId = LS_ENABLED && opts.lsParentRunId
+    ? await lsStart(childName, "llm", { provider: opts.provider, model: opts.model }, opts.lsParentRunId, { provider: opts.provider, model: opts.model })
+    : null;
   const ctrl = new AbortController();
   const TIMEOUT_MS = 600_000; // 总兜底 10 分钟：F2 超长成品生成（6000+ tokens）耗时可达 3min+，180s 会误杀持续输出；流式持续输出不中断，真卡住才到点
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -367,20 +376,34 @@ async function chatPrimary(opts: ChatOpts): Promise<ChatResult> {
       case "ernie": res = await streamErnie(p, opts.model ?? "ernie-4.0-8k", opts.apiKey, opts.apiSecret ?? "", withTimeout); break;
       default: throw new Error("未支持的 style: " + p.style);
     }
+  } catch (err) {
+    // 失败路径：结 run（填 error）。不吞异常，交回上层决定重试/主备。
+    await lsEnd(childId, { error: String((err as any)?.message || err) });
+    throw err;
   } finally {
     clearTimeout(timer);
   }
   res.elapsedMs = Date.now() - t0;
+  // 成功路径：结 run（usage + ls_* 模型元数据，供 LangSmith 估算成本 / 统计 token）。
+  await lsEnd(childId, {
+    outputs: { elapsedMs: res.elapsedMs, textLength: (res.text || "").length },
+    usage: res.usage,
+    lsModelMetadata: toLsModelMetadata(opts.provider, opts.model),
+  });
   return res;
 }
 
 export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
   const t0 = Date.now();
   const maxRetries = opts.maxRetries ?? Number(process.env.LLM_MAX_RETRIES ?? 2);
+  const baseName = opts.lsRunName || runNameOf(opts.provider, opts.model);
   let primaryErr: unknown = null;
-  // 主 provider：指数退避重试（仅可重试错误）
+  // 主 provider：指数退避重试（仅可重试错误）。
+  // 每次重试都是一次真实模型调用 → 各建一条子 run；同名重试追加 #2/#3 后缀避免 LangSmith 视图合并（§8）。
+  let primaryAttempt = 0;
+  const primaryName = () => (primaryAttempt === 0 ? baseName : `${baseName}#${primaryAttempt + 1}`);
   try {
-    const res = await withRetry(() => chatPrimary(opts), { maxRetries });
+    const res = await withRetry(() => { const n = primaryName(); primaryAttempt += 1; return chatPrimary(opts, n); }, { maxRetries });
     recordProviderAttempt(opts.provider, opts.model, true, res.elapsedMs);
     return res;
   } catch (err) {
@@ -391,8 +414,11 @@ export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
   const fallbacks = (opts.fallback && opts.fallback.length)
     ? opts.fallback
     : resolveFallbacks();
+  // 备 provider 的 run 名加序号后缀（·llm#2、#3…），避免与主 provider 同名子 run 在 LangSmith 视图合并（§8）。
+  let fbIndex = 1;
   for (const fb of fallbacks) {
     if (!fb.provider || !fb.apiKey) continue;
+    fbIndex += 1;
     const fbOpts: ChatOpts = {
       ...opts,
       provider: fb.provider,
@@ -401,9 +427,10 @@ export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
       apiSecret: fb.apiSecret,
       fallback: [], // 防止备 provider 再触发嵌套主备
     };
+    const fbChildName = `${runNameOf(fb.provider, fbOpts.model)}#${fbIndex}`;
     const ft0 = Date.now();
     try {
-      const r = await chatPrimary(fbOpts);
+      const r = await chatPrimary(fbOpts, fbChildName);
       recordProviderAttempt(fb.provider, fbOpts.model, true, r.elapsedMs);
       recordFailover(true);
       return r;
@@ -418,6 +445,14 @@ export async function chatStream(opts: ChatOpts): Promise<ChatResult> {
 
 export function labelOf(id: string, model: string): string {
   try { return `${providerOf(id).label}·${model}`; } catch { return `${id}·${model}`; }
+}
+
+// LangSmith run name 用（稳定，不受 label 文案影响；与 labelOf 分工不同，勿混用）。
+// labelOf 返回中文 label，仅用于 UI 展示（SSE meta 事件等）；runNameOf 一律用 provider id，
+// 保证同一模型的所有 run 归入同一统计簇（否则同一 deepseek-chat 会被 label 文案拆成多簇）。
+// 分隔符 = 半角中点 · （U+00B7），前端可稳定 split("·") 解析出 [providerId, model, suffix]。
+export function runNameOf(providerId: string, model: string): string {
+  return `${providerId}·${model}·llm`;
 }
 
 // ---- 工具调用（非流式，仅 openai 兼容）：让 LLM 决定是否调用检索等工具 ----
@@ -473,7 +508,12 @@ export async function chatWithTools(opts: {
     const usage = j.usage
       ? normUsage({ inputTokens: j.usage.prompt_tokens, outputTokens: j.usage.completion_tokens, totalTokens: j.usage.total_tokens })
       : emptyUsage();
-    await lsEnd(childId, { outputs: { toolCalls, content }, metadata: { usage } });
+    await lsEnd(childId, {
+      outputs: { toolCalls, content },
+      metadata: { usage },
+      usage,
+      lsModelMetadata: toLsModelMetadata(opts.provider, opts.model),
+    });
     return { content, toolCalls, usage };
   } catch (err) {
     await lsEnd(childId, { error: String((err as any)?.message || err) });

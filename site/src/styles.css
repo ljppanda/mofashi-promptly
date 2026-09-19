@@ -682,6 +682,37 @@ h1, h2, h3, h4,
   border-color: #cfe8d8;
 }
 
+/* ===== 用量看板（T-04 · 东方墨韵） ===== */
+/* 复用令牌与既有类（.card/.btn/.pill/.board-table/.tr-error）；此处仅补看板专属网格与占比条 */
+.stats-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.stats-card {
+  flex: 1 1 150px; min-width: 140px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 18px; box-shadow: var(--shadow-sm);
+}
+.stats-card .metric-label { font-family: var(--font); font-size: .78rem; color: var(--slate); }
+.stats-card .metric-num {
+  font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; line-height: 1.2;
+  margin-top: 6px; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.ratio-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ratio-label {
+  flex: 0 0 150px; font-size: .8rem; color: var(--slate);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ratio-track {
+  flex: 1; height: 12px; border-radius: 999px; background: var(--bg-soft);
+  overflow: hidden; border: 1px solid var(--line);
+}
+.ratio-fill { display: block; height: 100%; border-radius: 999px; background: var(--brand); transition: width .4s ease; }
+.ratio-fill.is-max { background: var(--brand); }
+.ratio-fill:not(.is-max) { background: var(--amber); }
+.ratio-val { flex: 0 0 92px; text-align: right; font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--ink); }
+@media (max-width: 640px) {
+  .ratio-label { flex-basis: 100px; font-size: .74rem; }
+  .ratio-val { flex-basis: 74px; }
+}
+
 /* ===== 移动端适配（D1） ===== */
 .author-link { color: var(--brand-700); font-weight: 600; text-decoration: none; }
 .author-link:hover { text-decoration: underline; }

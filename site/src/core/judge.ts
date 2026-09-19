@@ -66,17 +66,31 @@ export async function judgeSample(
 ): Promise<JudgeResult> {
   // 1) 用模板实例化出成品提示词（模型代写，用户只给目标）
   onStage?.("instantiate", "① 实例化测试样本（生成成品提示词）");
-  const { prompt: finalPrompt } = await LLM.useTemplate(template, goal, null, signal);
+  // 实例化调用 skipReport=true：跳过 useTemplate 内部自报，改由下方「带 from:'judge' 评测语境」统一上报，
+  // 避免同一实例化被记两次导致 token 统计虚高（第 7 参默认 false，其余调用方行为不变）。
+  const { prompt: finalPrompt, usage: instantiateUsage, elapsedMs: instantiateMs } = await LLM.useTemplate(template, goal, null, signal, false, null, true);
+  // 用量上报（脱敏）：llm:instantiate（judgeSample 内的实例化步骤）。
+  // 带 label「实例化」+ from:"judge" 语境，在 LangSmith 上把「F13 实例化」与「普通实例化」区分开。
+  const instCfg = LLM.resolveCfg();
+  LLM.reportTrace("llm:instantiate", "实例化", [{ provider: instCfg.provider, model: instCfg.model, usage: instantiateUsage, elapsedMs: instantiateMs }], { from: "judge", industry: template && template.industry });
   // 2) 把成品提示词作为系统设定，goal 作为首个用户问题，跑被测模型
   onStage?.("run", "② 调用被测模型生成答案");
-  const ran = await LLM.chatWithPrompt(finalPrompt, [{ role: "user", content: goal }], null, signal, targetOver);
+  const ran = await LLM.chatWithPrompt(finalPrompt, [{ role: "user", content: goal }], null, signal, targetOver, true);
   const output = (ran && ran.text) || "";
   const costTokens = (ran && ran.usage && typeof ran.usage.total_tokens === "number") ? ran.usage.total_tokens : null;
   const elapsedMs = (ran && typeof ran.elapsedMs === "number") ? ran.elapsedMs : null;
+  // 用量上报（脱敏）：llm:run / label=「被测模型」——F13 自动优化闭环中「被测模型」的用量。
+  // 关键：用 targetOver 解析出的真实 provider/model（跨厂商评测时被测模型可能≠裁判模型，必须可区分）。
+  const targetCfg = LLM.resolveCfg(targetOver);
+  LLM.reportTrace("llm:run", "被测模型", [{ provider: targetCfg.provider, model: targetCfg.model, usage: (ran && ran.usage) || undefined, elapsedMs: elapsedMs ?? undefined }], { from: "judge", goalLen: goal.length });
   // 3) 裁判打分
   onStage?.("judge", "③ 裁判模型打分中");
   const user = `目标：${goal}\n\n=== 被测输出 ===\n${output}\n\n请按 JSON 评分。`;
-  const jt = await LLM.chatWithPrompt(JUDGE_SYSTEM, [{ role: "user", content: user }], null, signal, judgeOver);
+  const jt = await LLM.chatWithPrompt(JUDGE_SYSTEM, [{ role: "user", content: user }], null, signal, judgeOver, true);
+  // 用量上报（脱敏）：judge:eval / label=「裁判模型」——F13「裁判模型」的用量。
+  // 用 judgeOver 解析出的真实 provider/model（裁判可跨厂商，务必与被测模型分开归因）。
+  const judgeCfg = LLM.resolveCfg(judgeOver);
+  LLM.reportTrace("judge:eval", "裁判模型", [{ provider: judgeCfg.provider, model: judgeCfg.model, usage: (jt && jt.usage) || undefined, elapsedMs: (jt && typeof jt.elapsedMs === "number") ? jt.elapsedMs : undefined }], { from: "judge", goalLen: goal.length });
   const obj = extractJSON((jt && jt.text) || "");
   if (!obj) {
     return { dims: { relevance: 0, structure: 0, usable: 0, specific: 0, safety: 0, jsonValid: 0 }, total: 0, note: "裁判解析失败", output, finalPrompt, available: false, costTokens: null, elapsedMs: null };

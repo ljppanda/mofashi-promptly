@@ -3,7 +3,7 @@
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";
-import { fmtUsage, confirmDialog } from "../core/ui.js";
+import { fmtUsage, fmtUsageByNode, confirmDialog } from "../core/ui.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
 import { GEN_STEPS_5 } from "../core/config.js";
 
@@ -69,6 +69,9 @@ export async function handleGenerate(): Promise<void> {
     renderGenSteps("__done__", GEN_STEPS_5);
     if (res.usage) live.textContent += "\n\n📊 " + fmtUsage(res.usage, res.elapsedMs);
     else live.textContent += "\n耗时 " + (res.elapsedMs / 1000).toFixed(1) + "s";
+    // 节点级 token 明细：把每个 Agent 节点（clarify/retrieve/draft…）的用量逐条列出，避免只看到最后一步造成误解
+    const byNode = fmtUsageByNode(res.usages);
+    if (byNode) live.textContent += "\n📊 分环节：" + byNode;
     // 把用量带到详情页持久展示
     res.tpl._genUsage = res.usage;
     res.tpl._genElapsed = res.elapsedMs;

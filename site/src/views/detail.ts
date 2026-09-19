@@ -5,7 +5,7 @@ import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";
-import { esc, setMeta, fmtUsage, metricBump, toast, diffLines, fmtDateTime } from "../core/ui.js";
+import { esc, setMeta, fmtUsage, fmtUsageByNode, metricBump, toast, diffLines, fmtDateTime } from "../core/ui.js";
 import { GEN_STEPS_3, ALL_INDUSTRIES, MAX_CLARIFY_ROUNDS } from "../core/config.js";
 import { renderGenSteps, appendThink, renderRagRefs } from "../core/steps.js";
 import { openRefineBox, closeRefineBox, handleRefine, templateRefineCtx } from "./refine.js";
@@ -539,6 +539,9 @@ async function startUseGeneration(goal: string, msg: HTMLElement, live: HTMLElem
     renderGenSteps("__done__", GEN_STEPS_3);
     const usageEl = (document.getElementById("use-usage") as HTMLElement);
     if (res.usage) usageEl.textContent = "📊 " + fmtUsage(res.usage, res.elapsedMs);
+    // 节点级 token 明细：首稿 + 自检改写等每一步各一行，避免只保留最后一步
+    const byNode = fmtUsageByNode(res.usages);
+    if (byNode) usageEl.textContent += (usageEl.textContent ? "　" : "") + "📊 分环节：" + byNode;
     actions.style.display = "flex";
     msg.textContent = "✓ 已生成成品提示词（模型已结合你确认的信息写好具体内容）。";
   } catch (e) {
