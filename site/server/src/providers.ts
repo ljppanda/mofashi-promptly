@@ -264,7 +264,6 @@ async function streamGemini(p: ProviderDef, model: string, key: string, opts: Ch
   return { text, usage: normUsage(usage), elapsedMs: 0 };
 }
 
-// ---- 文心流式（OpenAI 兼容 + token 换取）----
 async function streamErnie(p: ProviderDef, model: string, key: string, secret: string, opts: ChatOpts): Promise<ChatResult> {
   const token = await ernieToken(key, secret, opts.signal);
   const url = `${p.baseURL}/${model}?access_token=${encodeURIComponent(token)}`;
@@ -289,8 +288,6 @@ async function streamErnie(p: ProviderDef, model: string, key: string, secret: s
   }, opts.signal);
   return { text, usage: normUsage(usage), elapsedMs: 0 };
 }
-
-// ---------- 韧性：错误分类 / 重试退避 / 主备切换 ----------
 
 // 从错误信息里解析上游 HTTP 状态码（stream* 抛出的错误形如 `[标签] 500 ...`）。
 function statusOf(err: unknown): number | null {

@@ -1,5 +1,4 @@
-// views/settings.ts — 设置（模型配置）（Component 模式）。
-// 已裁剪为「个人本地」工具：仅保留服务商 / 模型 / API Key / 代理 / 测试连接；移除登录注册等社区账号模块。
+// views/settings.ts — 设置（模型配置）：服务商 / 模型 / API Key / 代理 / 测试连接，纯本地。
 import { ctx } from "../core/ctx.js";
 import { esc, toast } from "../core/ui.js";
 import { LLM } from "../llm.js";

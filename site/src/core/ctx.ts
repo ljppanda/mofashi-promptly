@@ -28,7 +28,6 @@ export interface AppCtx {
   _thinkKind: string;                            // 当前打开思考行的类型（"reasoning" | "msg" | ""）
 }
 
-// 工厂函数：延迟构造以避免「在初始化前引用 ctx」的问题，同时符合 Factory 模式。
 function makeCtx(): AppCtx {
   const c: AppCtx = {
     appEl: () => document.getElementById("app") as HTMLElement,

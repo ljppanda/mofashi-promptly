@@ -1,5 +1,4 @@
-// views/refine.ts — F5 动态改写提示词（Component 模式）。
-// 模板详情页与社区详情页共用同一套改写逻辑，靠 refineCtx 区分元素 id 与状态访问器。
+// views/refine.ts — F5 动态改写提示词：模板/社区详情页共用，靠 refineCtx 区分元素 id 与状态访问器。
 import { ctx } from "../core/ctx.js";
 import { esc } from "../core/ui.js";
 import { renderGenSteps, appendThink } from "../core/steps.js";

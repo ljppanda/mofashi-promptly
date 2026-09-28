@@ -139,8 +139,7 @@ export const LLM = (function () {
     } catch (e) { /* 同步异常静默（如 fetch 被禁用） */ }
   }
 
-  // 便捷：把一次直连调用的 { provider, model, usage, elapsedMs } 组装成单 call 并上报。
-  // cfg 为 resolveCfg(over) 的返回值（含真实 provider key 与模型名，勿用中文 label）。
+  // 把一次直连调用组装成单 call 并上报（cfg 用 resolveCfg 返回值，勿用中文 label）。
   function reportCall(flow, cfg, res, label, metadata) {
     const call = {
       provider: cfg && cfg.provider,
@@ -600,13 +599,9 @@ export const LLM = (function () {
     }
   }
 
-  // 实时拉取厂商在役模型列表（用于设置页「拉取真实模型列表」按钮）。
-  // 优先内存缓存 → localStorage 持久缓存；失败返回 null（调用方回退硬编码清单）。
-  // 文心(ernie)无公开 /models 列表，直接返回 null。其余走各厂商 list 接口：
-  //   - openai 风格：GET {base}/models → { data:[{id}] }
-  //   - claude：GET {base}/models（x-api-key 头）→ { data:[{id}] }
-  //   - gemini：GET {base}/models?key= → { models:[{name:"models/xxx"}] }
-  // 通过 relayFetch 复用代理开关（代理模式下走 /relay，避免跨域 / 隐藏 Key）。
+  // 实时拉取厂商在役模型列表（设置页「拉取真实模型列表」按钮）：优先内存缓存 → localStorage；
+  // 失败或文心(ernie，无公开 /models)返回 null（调用方回退硬编码清单）；openai/claude 走 GET {base}/models，
+  // gemini 走 GET {base}/models?key=；均经 relayFetch 复用代理开关。
   const modelCache = new Map();
   let orListCache = null; // 二级兜底源：OpenRouter 聚合目录（公开、无需 Key）
   // 厂商 → OpenRouter 前缀映射；命中后剥离前缀与 :free/:batch 后缀得到该厂商原生模型 ID
@@ -667,7 +662,6 @@ export const LLM = (function () {
     return null;
   }
 
-  // ---------- 走服务端 Agent（/agent/*，带 RAG + 自审 + 流式）----------
   // 读取 Agent 的 SSE 事件流，逐事件回调 onEvent(name, data)；onEvent 抛错会在流结束后向上抛出
   async function readAgentSSE(r, onEvent, signal) {
     const reader = r.body.getReader();

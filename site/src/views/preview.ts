@@ -1,9 +1,4 @@
-// views/preview.ts — 模板「示例预览」（报告 #3）。
-//
-// 价值：让用户在收藏/使用前，先真实看到"这条模板能产出什么"——
-//   ① 按模板把示例目标实例化为一条成品提示词
-//   ② 直接用这条成品提示词跑出一段示例回答（流式）
-// 对标 PromptBase 的"看示例输出"。全程用用户自己的 Key 在浏览器本地跑，零服务端依赖、零外泄。
+// views/preview.ts — 模板「示例预览」：① 按模板实例化成品提示词 ② 用它跑示例回答（流式）。全程本地、零服务端依赖。
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { esc, toast } from "../core/ui.js";

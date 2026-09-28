@@ -145,9 +145,7 @@ const RANGES: Array<{ k: RangeKey; label: string }> = [
   { k: "all", label: "全部" },
 ];
 
-// ---------- 数值工具（null 安全） ----------
-
-// 取有限数，否则 null。绝不把 NaN/Infinity 当有效值。
+// 数值工具（null 安全）：取有限数，否则 null。绝不把 NaN/Infinity 当有效值。
 function num(v: number | null | undefined): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }

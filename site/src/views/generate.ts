@@ -1,5 +1,4 @@
-// views/generate.ts — F1 模板生成流水线（Component + 状态机）。
-// 负责首页「生成模板」：调用 Agent（RAG + 自审 + 流式），失败回退浏览器直连。
+// views/generate.ts — F1 模板生成流水线：首页「生成模板」调 Agent（RAG + 自审 + 流式），失败回退浏览器直连。
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";
 import { ctx } from "../core/ctx.js";

@@ -1,11 +1,5 @@
-// core/judge.ts — 提示词质量自动评测（LLM-as-judge），浏览器直连，复用 LLM.chatWithPrompt。
-//
-// 用途：支撑「自动优化闭环」——对一条模板采样 N 组测试目标，逐一实例化 → 跑被测模型 →
-// 让裁判模型按 4 维度打分，聚合出均分。全部在浏览器用用户自己的 Key 跑，零服务端依赖、零外泄。
-//
-// 裁判维度（移植自服务端 eval_chain.ts 的 judge 思路，简化为「单条绝对打分」更稳）：
-//   relevance 相关性 / structure 结构完整度 / usable 可直接使用性 / specific 具体不空洞，各 1-5 分，total 0-20。
-
+// core/judge.ts — 提示词质量自动评测（LLM-as-judge）：浏览器直连用用户自身 Key 跑，零服务端依赖。
+// 支撑「自动优化闭环」（F13）：对模板采样 N 组目标 → 实例化 → 跑被测模型 → 裁判按相关性/结构/可用/具体 4 维打分（各 1-5，total 0-20）。
 import { LLM } from "../llm.js";
 
 export interface JudgeDims { relevance: number; structure: number; usable: number; specific: number; safety: number; jsonValid: number; }

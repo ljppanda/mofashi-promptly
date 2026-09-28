@@ -1,6 +1,4 @@
-// views/home.ts — 首页 / 行业页 / 模板卡片（Component 模式）。
-// 已裁剪为「个人本地提示词生成 + 优化」工具：去掉社区广场 / 热度榜 / 聚合指标，
-// 首页的「热门模板」改为直接展示内置精选模板（本机数据，零后端依赖）。
+// views/home.ts — 首页 / 行业页 / 模板库 / 模板卡片（组件）。内置精选模板，零后端依赖。
 import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { ctx } from "../core/ctx.js";

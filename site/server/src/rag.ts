@@ -408,7 +408,6 @@ async function getIndex(): Promise<VectorStoreIndex> {
   return p;
 }
 
-// ---------- 检索（保持与原接口一致：retrieve(industry, sentence, topK)）----------
 export async function retrieve(
   industry: string,
   sentence: string,

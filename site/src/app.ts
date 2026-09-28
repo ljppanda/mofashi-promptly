@@ -1,10 +1,5 @@
-// 应用组合根（Composition Root）：仅做编排——哈希路由分发 + 启动。
-// 原 2443 行单体 IIFE 已按设计模式拆分为：
-//   core/   —— Context(ctx 依赖注入) / Module(ui·steps) / Configuration(config)
-//   views/  —— Component(各页面) + Router(本文件)
-// 具体渲染逻辑都在各视图模块，本文件不承载业务细节。
-// 注：本工具已裁剪为「个人本地提示词生成 + 优化」工具，去掉了社区/账号/排行榜/可观测等模块，
-// 故只保留 首页(home) / 行业(i) / 详情(t) / 我的模板(my) / 设置(settings) 路由。
+// app.ts — 应用组合根：哈希路由分发 + 启动，业务渲染逻辑分散在各视图模块。
+// 已裁剪为「个人本地提示词生成 + 优化」工具，仅保留 home / i / t / my / stats / settings 路由。
 import "./tailwind.css"; // 构建期编译的 Tailwind 工具类（替代 cdn.tailwindcss.com 运行时依赖）
 
 import { ctx } from "./core/ctx.js";

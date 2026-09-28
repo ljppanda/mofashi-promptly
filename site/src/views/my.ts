@@ -1,5 +1,4 @@
-// views/my.ts — 我的模板（按分类分组）（Component 模式）。
-// 个人本地工具：模板仅存本机浏览器（localStorage），无云端账号、无社区发布。
+// views/my.ts — 我的模板（含 AI 草稿，按行业/标签分组）。纯本地 localStorage，无云端账号。
 import { ctx } from "../core/ctx.js";
 import { esc } from "../core/ui.js";
 import { Store } from "../store.js";

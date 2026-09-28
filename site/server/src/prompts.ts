@@ -1,10 +1,4 @@
-// prompts.ts — Agent 提示词集中注册表（带版本号）。
-//
-// 设计意图（P1 收尾 / prompt 版本锁定）：
-//  - 所有 Agent 用的 system prompt 集中在此，每个 prompt 可存多个版本（PROMPT_VERSIONS[id] = 版本数组）。
-//  - getPrompt(id, version?) 默认返回最新版；调用方可在请求里通过 promptVersions 指定某版「锁定」，
-//    这样即使你改坏了 v2 的草稿 prompt，已 pin 到 v1 的链路（或回滚配置）仍不受影响。
-//  - 新增/修改提示词：在对应 id 下追加一个新版本对象即可，旧版本保留以便回滚。
+// prompts.ts — Agent 提示词集中注册表（带版本号）：每个 prompt 可存多版本，getPrompt 默认最新版，调用方可经 promptVersions 锁定某版以便回滚。
 
 export interface PromptDef {
   id: string;

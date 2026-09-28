@@ -1,4 +1,4 @@
-// core/config.ts — 静态配置（Configuration/Registry 模式）：跨视图共享的常量集中于此。
+// core/config.ts — 跨视图共享的静态配置常量。
 export const ICON: Record<string, string> = {
   "法律": "⚖️", "医疗健康": "🩺", "职场办公": "💼", "教育培训": "🎓",
   "电商运营": "🛒", "金融": "💰", "写作创作": "✍️", "编程开发": "💻"

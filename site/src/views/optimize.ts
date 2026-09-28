@@ -1,7 +1,4 @@
-// views/optimize.ts — 提示词自动优化闭环（F13）。
-//
-// 闭环：对模板采样 N 组测试目标 → 实例化 → 跑被测模型 → 裁判打分（judge.ts）
-//       若均分 < 阈值 → 基于「评测结论」自动改写（LLM.optimizePrompt）→ 复测 → 并排对比 → 采用/放弃。
+// views/optimize.ts — 提示词自动优化闭环（F13）：采样→实例化→跑被测模型→裁判打分→低于阈值则改写复测→对比。
 // 全部在浏览器用用户自己的 Key 跑，零服务端依赖、零外泄，复用 F10 版本历史做回滚兜底。
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";

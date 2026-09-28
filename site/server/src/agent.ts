@@ -1,7 +1,4 @@
-// agent.ts
-// 模板架构师 Agent（M2：LangGraph 状态图）。
-// 状态图：clarify → retrieve → draft → validate →（不通过则带 critique 回流 draft）→ finalize。
-// 对外契约保持：runAgent(input, events, signal) + 输出模板结构与前端口径一致（title/industry/task/summary/variables/prompt）。
+// agent.ts — 模板架构师 Agent（LangGraph 状态图）：clarify→retrieve→draft→validate→finalize，对外 runAgent / runAgentUse / runAgentClarify / runAgentRefine。
 
 import { Annotation, StateGraph, START, END } from "@langchain/langgraph";
 import { chatStream, providerOf, labelOf, runNameOf, chatWithTools, type Usage } from "./providers.js";
@@ -411,7 +408,6 @@ export async function runAgentUse(
   }
 }
 
-// ---------- F3：交互式访谈澄清（模型反问、用户点选确认，直到信息完整）----------
 // 设计：一句话目标往往说不清。模型站在模板专长角度，主动追问最关键缺失的维度，
 // 每个问题给 2-4 个贴合领域的选项让用户点选（也允许自由补充），多轮直到信息足够，
 // 再把"目标 + 已确认问答"交给 runAgentUse 代写成品提示词。追问由模型动态生成，

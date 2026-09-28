@@ -1,5 +1,4 @@
-// core/steps.ts — Agent 状态机步骤条（Module 模式）。
-// 负责把后端流式事件可视化为「实时思考时间线」，状态（思考日志 / 当前步）集中存于 ctx。
+// core/steps.ts — Agent 状态机步骤条：把后端流式事件可视化为「实时思考时间线」（状态存于 ctx）。
 import { ctx } from "./ctx.js";
 import { GEN_STEPS_5, STEP_HINT } from "./config.js";
 import { esc } from "./ui.js";

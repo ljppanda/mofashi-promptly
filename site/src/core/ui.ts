@@ -110,8 +110,7 @@ export function fmtDateTime(ts: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// ---------- 用量看板（T-04）格式化辅助 ----------
-// 设计原则：任何「上游缺失」都显示「—」，绝不用 0 冒充真实零值（0 会让用户误判为零消耗）。
+// 用量看板格式化辅助：任何「上游缺失」都显示「—」，绝不用 0 冒充真实零值（0 会让用户误判为零消耗）。
 
 // 千分位整数（如 34567 → "34,567"）。null/undefined/非有限数 → "—"。
 export function fmtInt(n: number | null | undefined): string {

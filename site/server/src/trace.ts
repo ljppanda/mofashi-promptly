@@ -142,8 +142,6 @@ export function parseTraceReport(raw: unknown, allowed: readonly string[] = PUBL
   return rep;
 }
 
-// ---------- run 树构造（可注入 deps 以便离线单测） ----------
-
 // emitTraceReport 依赖的上报原语；默认绑定 langsmith.ts 的真实实现，单测可注入替身。
 export interface TraceDeps {
   lsStart: (

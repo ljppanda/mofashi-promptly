@@ -1,6 +1,4 @@
-// views/detail.ts — 模板详情页 + F2 代写流水线 + 测试沙盒 + 导入（Component 模式）。
-// 已裁剪为「个人本地」工具：去掉社区评分 / 发布 / 跨模型对比 / 作者主页，
-// 保留 F2 代写、本地收藏、版本历史、一键优化（F13/F39）、导入后增强与试跑。
+// views/detail.ts — 模板详情页：F2 代写流水线 + 访谈确认 + 测试沙盒 + 本地收藏/版本/优化/导入增强。纯本地工具。
 import { TEMPLATES } from "../templates.js";
 import { LLM } from "../llm.js";
 import { Store } from "../store.js";

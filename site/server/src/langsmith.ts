@@ -183,7 +183,6 @@ export async function lsEnd(
         : { usage_metadata: usageMeta };
     }
 
-    // 模型元数据：显式传入优先（ls_* 优先，与 SDK traceable 的覆盖顺序一致）。
     const lsModelMetadata = opts.lsModelMetadata;
 
     // extra.metadata：合并上游 metadata 与 ls_* 模型元数据（ls_* 放后即优先生效）。

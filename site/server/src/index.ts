@@ -319,7 +319,7 @@ async function handleAgentRefine(req: http.IncomingMessage, res: http.ServerResp
 // 故由前端把「脱敏后的用量摘要」POST 到本机后端，由服务端构造 LangSmith run 树。
 // 隐私边界：只接收 provider/model/usage/elapsedMs 等脱敏字段，绝不接收 Prompt 正文 / API Key / 厂商原始响应。
 //
-// 处理契约（§3.2）：
+// 处理契约：
 //   1) 未启用（!LS_ENABLED）→ 立即 {ok:true}，不建任何 run、不发任何网络请求（零开销）；
 //   2) parseTraceReport(body) 走 PUBLIC_FLOWS 白名单校验，非法 → 400 {ok:false,error}；
 //   3) 合法 → emitTraceReport 构造 1 条父 chain run + 每个 call 1 条子 llm run（带 usage）；

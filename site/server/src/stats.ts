@@ -1,16 +1,8 @@
-// stats.ts
-// 后端用量聚合端点（GET /agent/stats）的取数层。
-// 目的：把 LangSmith 的聚合统计代理成本地一个 JSON，供前端看板渲染，用户无需登录 LangSmith 网站。
-// 设计（docs/dashboard_design.md §2）：
-//   - 一次看板加载最多 2 次 LangSmith 请求（① 分组 stats + ② runs/query），并行发出（§2.9）。
-//   - 错误率自算（error/(success+error)，排除 pending）（§2.5）。
-//   - metadata 分组返回空 {} → 回退 name 分组 + canonicalName 归并（§2.3）。
-//     ⚠️ 2026-09-18 修正：flow 视图**直接走 name 分组**（groupByBody 映射），不再有「回退重发第 3 次」
-//        —— 那个第 3 发必被 LangSmith 429 打死。请求数稳定为 2（stats + query）。
-//   - 白名单过滤（TRACE_FLOWS 13 个）+ 探针噪声黑名单（§2.6）。
-//   - 30s TTL 内存缓存 + in-flight memo（§2.7）。
-//   - 关闭态零网络（§2.8）。
-// 依赖全部可注入（deps），使单测能离线零网络：见 StatsDeps / createStatsFetcher。
+// stats.ts — GET /agent/stats 取数层：把 LangSmith 聚合统计代理成本地 JSON，供前端看板渲染，用户无需登录 LangSmith 网站。
+// 一次看板加载最多 2 次 LangSmith 请求（① 分组 stats + ② runs/query，并行发出）。
+// 错误率自算：error/(success+error)，排除 pending；白名单过滤（TRACE_FLOWS）+ 探针噪声黑名单；30s TTL 内存缓存 + in-flight memo；关闭态零网络。
+// ⚠️ 2026-09-18 修正：flow 视图直接走 name 分组（groupByBody 映射），不再「回退重发第 3 次」—— 那个第 3 发必被 LangSmith 429 打死。请求数稳定为 2（stats + query）。
+// 依赖全部可注入（StatsDeps），使单测能离线零网络。
 
 import { LS_ENABLED, ensureProject, PROJECT, ENDPOINT, LS_API_KEY } from "./langsmith.js";
 import { TRACE_FLOWS, PUBLIC_FLOWS } from "./trace.js";
@@ -92,7 +84,7 @@ export const STATS_SELECT: readonly string[] = [
   "last_run_start_time",
 ] as const;
 
-const MAX_GROUPS = 20; // §2.2 硬约束：1~20，超出会 422
+const MAX_GROUPS = 20; // 硬约束：1~20，超出会 422
 
 // 探针噪声黑名单前缀/子串（§2.6）。LangSmith 无删除 API，只能过滤。
 // ⚠️ 2026-09-18 补 "e2e-probe-root"（T-05 自测遗留的根 run 探针；此前未收录，污染 rootRunCount/pendingRate）。
@@ -281,7 +273,6 @@ export interface StatsDeps {
   sleep: (ms: number) => Promise<void>;
 }
 
-// 默认依赖：绑定 langsmith.ts 与真实 fetch。
 export function defaultDeps(): StatsDeps {
   return {
     enabled: LS_ENABLED,
@@ -299,8 +290,6 @@ export function defaultDeps(): StatsDeps {
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };
 }
-
-// ---------- 429 / 非 JSON 判定 + 退避重试（§2.9） ----------
 
 const BACKOFFS = [1000, 3000]; // 最多 2 次重试；真机 429 窗口较大，300→900ms 太短（2026-09-18 实测改）
 
@@ -351,7 +340,7 @@ async function postJson(deps: StatsDeps, url: string, body: unknown): Promise<Fe
 
 interface StatsFetchOutcome { groups: StatsGroup[]; partial: boolean; warnings: string[]; }
 
-// 拉一次分组 stats（**单次请求，绝不换参重发**，§2.9 预算）。
+// 拉一次分组 stats（**单次请求，绝不换参重发**）。
 // flow 视图已在 groupByBody 里映射为 name 分组，故不存在「metadata 空 → 回退重发第 3 次」的设计。
 async function fetchGroupStats(deps: StatsDeps, projectId: string, range: RangeKey, groupBy: GroupByKey): Promise<StatsFetchOutcome> {
   const times = rangeToTimes(range, deps.now());
@@ -437,7 +426,7 @@ function mergeStats(acc: Map<string, { stats: RunStats; kind: "flow" | "llm" }>,
     if (a === null && b === null) (curStats[k] as unknown) = null;
     else (curStats[k] as unknown) = (a ?? 0) + (b ?? 0);
   }
-  // 非加和字段：保留已有非空值，否则取新值（逐字段判空，§2.2）
+  // 非加和字段：保留已有非空值，否则取新值（逐字段判空）
   const KEEP_KEYS: (keyof RunStats)[] = ["median_tokens", "tokens_p99", "cost_p50", "cost_p99", "latency_p50", "latency_p99", "latency_avg", "first_token_p50", "first_token_p99", "streaming_rate", "last_run_start_time"];
   for (const k of KEEP_KEYS) {
     if ((curStats[k] === null || curStats[k] === undefined) && incoming[k] !== undefined) (curStats[k] as unknown) = incoming[k];
@@ -453,8 +442,6 @@ function labelForKey(key: string): string | undefined {
   if (def && def.label) return [def.label, ...parts.slice(1)].join("·");
   return undefined;
 }
-
-// ---------- 取数：② runs/query（status 分布 + 根 run 数，§2.5） ----------
 
 interface QueryOutcome { runs: Array<{ name?: string; status?: string }>; filteredNoiseCount: number; partial: boolean; warnings: string[]; }
 
