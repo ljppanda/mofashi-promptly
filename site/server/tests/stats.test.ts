@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  canonicalName, isNoise, isWhitelistedFlow, isLlmRunName,
+  canonicalName, isNoise, isTelemetryRoot, isWhitelistedFlow, isLlmRunName,
   rangeToTimes, statusDistribution, errorRateOf, pendingRateOf,
   groupByBody, getStats, getStatsCached, _clearStatsCache,
   buildGroups, coerceGroupBy, VALID_GROUP_BYS,
@@ -621,4 +621,107 @@ test("getStats: 自洽断言——任何噪声/状态组合下 rootRunCount === 
   assert.equal(r.totals.successCount + r.totals.errorCount + r.totals.pendingCount, r.totals.rootRunCount);
   assert.equal(r.totals.errorRate, 1 / 3, "error/(success+error)=1/3");
   assert.equal(r.totals.pendingRate, 1 / 4, "pending/全部=1/4");
+});
+
+// ---------- P0-4(a)：failover 重试遥测从「调用次数」排除 ----------
+
+test("C1 [P0-4a]: 12 业务 + attempt(error) + failover(success) + 5 探针 → rootRunCount=12 / filteredNoiseCount=5 / errorRate=0", async () => {
+  assert.equal(isTelemetryRoot("deepseek·deepseek-chat·attempt"), true);
+  assert.equal(isTelemetryRoot("llm:failover"), true);
+  assert.equal(isTelemetryRoot("deepseek·deepseek-chat·llm"), false, "·llm 子 run 是真实调用，不得排除");
+  assert.equal(isTelemetryRoot("deepseek·deepseek-chat·tool"), false, "·tool 有 parent，不得排除");
+  assert.equal(isTelemetryRoot("agent:refine"), false);
+
+  const runs = [
+    ...Array.from({ length: 12 }, () => ({ name: "agent:refine", status: "success" })),
+    { name: "deepseek·deepseek-chat·attempt", status: "error" },
+    { name: "llm:failover", status: "success" },
+    { name: "t01-probe:withTrace-metadata", status: "pending" },
+    { name: "t01-probe:withTrace-metadata", status: "pending" },
+    { name: "t01-probe:withTrace-metadata", status: "pending" },
+    { name: "withtrace-probe", status: "pending" },
+    { name: "e2e-probe-root", status: "success" },
+  ];
+  const { deps } = makeDeps({
+    statsResponses: [{ json: REAL_MACHINE_GROUPS }],
+    queryResponse: { json: { runs } },
+  });
+  const r = await getStats("7d", "flow", deps);
+
+  assert.equal(r.totals.rootRunCount, 12, "只数业务流程根 run");
+  assert.equal(r.totals.filteredNoiseCount, 5, "提示条仍只数探针，语义与数字不变");
+  assert.equal(r.totals.errorCount, 0, "失败 attempt 不得抬升错误计数");
+  assert.equal(r.totals.errorRate, 0, "流程重试成功时，attempt 的 error 不得虚增错误率");
+  assert.equal(r.totals.successCount, 12, "failover 的虚假 success 也不得抬高分母");
+  assert.equal(r.totals.pendingRate, 0);
+});
+
+test("C2 [P0-4a]: llmCallCount 与改动前一致（=11），遥测记录不重复计数", async () => {
+  // 基线：上方「真机场景」用例用同一份 REAL_MACHINE_GROUPS 已断言 llmCallCount = 10+1 = 11。
+  // 在分组 stats 与根 run 两侧同时注入遥测名，验证它既不进 llmCallCount、也不进 rootRunCount。
+  const dirtyGroups = {
+    ...REAL_MACHINE_GROUPS,
+    "deepseek·deepseek-chat·attempt": { run_count: 3, total_tokens: 0 },
+    "llm:failover": { run_count: 1, total_tokens: 0 },
+  };
+  const runs = [
+    ...REAL_MACHINE_ROOT_RUNS,
+    { name: "deepseek·deepseek-chat·attempt", status: "error" },
+    { name: "llm:failover", status: "success" },
+  ];
+  const { deps } = makeDeps({
+    statsResponses: [{ json: dirtyGroups }],
+    queryResponse: { json: { runs } },
+  });
+  const r = await getStats("7d", "flow", deps);
+
+  assert.equal(r.totals.llmCallCount, 11, "与改动前数值相同：attempt 是同一次调用的重复记录，加了会双计");
+  assert.equal(r.totals.rootRunCount, 12, "遥测根 run 不计入业务调用次数");
+  assert.ok(!r.groups.some((g) => g.key.includes("attempt") || g.key === "llm:failover"), "分组层也不得出现遥测名");
+});
+
+test("C3 [P0-4a]: 含遥测样本时 rootRunCount === success+error+pending 恒等", async () => {
+  const { deps } = makeDeps({
+    statsResponses: [{ json: { "agent:refine": { run_count: 5 } } }],
+    queryResponse: { json: { runs: [
+      { name: "agent:refine", status: "success" },
+      { name: "agent:refine", status: "success" },
+      { name: "judge:eval", status: "error" },
+      { name: "judge:eval", status: "pending" },
+      { name: "t01-probe:x", status: "pending" },
+      { name: "deepseek·deepseek-chat·attempt", status: "error" },
+      { name: "llm:failover", status: "success" },
+    ] } },
+  });
+  const r = await getStats("7d", "flow", deps);
+  assert.equal(r.totals.rootRunCount, 4);
+  assert.equal(r.totals.filteredNoiseCount, 1);
+  assert.equal(r.totals.successCount + r.totals.errorCount + r.totals.pendingCount, r.totals.rootRunCount);
+  assert.equal(r.totals.errorRate, 1 / 3, "遥测 error 排除后仍为 1/3");
+  assert.equal(r.totals.pendingRate, 1 / 4);
+});
+
+test("C4 [P0-4a]: 未知/缺失 status 归入 pending，恒等式不破", async () => {
+  const dist = statusDistribution([
+    { status: "success" }, { status: "error" }, { status: "weird_state" }, {},
+  ]);
+  assert.deepEqual(dist, { success: 1, error: 1, pending: 2, total: 4 });
+  assert.equal(dist.success + dist.error + dist.pending, dist.total);
+
+  // 端到端：未知 status 的根 run 计入 pending，遥测仍被排除。
+  const { deps } = makeDeps({
+    statsResponses: [{ json: { "agent:refine": { run_count: 3 } } }],
+    queryResponse: { json: { runs: [
+      { name: "agent:refine", status: "success" },
+      { name: "agent:refine", status: "unknown_state" },
+      { name: "deepseek·deepseek-chat·attempt", status: "error" },
+    ] } },
+  });
+  const r = await getStats("7d", "flow", deps);
+  assert.equal(r.totals.rootRunCount, 2);
+  assert.equal(r.totals.successCount, 1);
+  assert.equal(r.totals.errorCount, 0, "遥测的 error 已排除");
+  assert.equal(r.totals.pendingCount, 1, "未知 status 归入 pending");
+  assert.equal(r.totals.successCount + r.totals.errorCount + r.totals.pendingCount, r.totals.rootRunCount);
+  assert.equal(r.totals.pendingRate, 1 / 2);
 });

@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeTotals, normalizeGroup } from "../../src/views/stats.js";
+import { normalizeTotals, normalizeGroup, renderNoiseBar } from "../../src/views/stats.js";
 
 // 空分组：只关心 totals 的计数逻辑（token/cost/latency 由 groups 派生，此处无需求）。
 const NO_GROUPS: any[] = [];
@@ -90,4 +90,20 @@ test("normalizeTotals: rootRunCount / filteredNoiseCount 透传；filteredNoiseC
   assert.equal(t.rootRunCount, 12);
   assert.equal(t.filteredNoiseCount, 5);
   assert.equal(normalizeTotals({ rootRunCount: 12 }, NO_GROUPS).filteredNoiseCount, 0, "缺省 0");
+});
+
+// ---------- P0-4(b)：顶部噪声提示条（纯字符串，离线断言） ----------
+
+test("renderNoiseBar: count>0 时含两段文案并复用 .pill-amber", () => {
+  const html = renderNoiseBar(5);
+  assert.match(html, /已过滤 5 条探针噪声/);
+  assert.match(html, /不计入上方统计/);
+  assert.match(html, /调用次数不含重试与运维遥测记录/);
+  assert.match(html, /class="pill-amber"/);
+  assert.match(html, /margin-bottom:12px/);
+});
+
+test("renderNoiseBar: count=0 / null 返回空串（不出现「已过滤 0 条」）", () => {
+  assert.equal(renderNoiseBar(0), "");
+  assert.equal(renderNoiseBar(null), "");
 });

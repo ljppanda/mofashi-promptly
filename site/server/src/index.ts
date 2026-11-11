@@ -11,7 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runAgent, runAgentUse, runAgentClarify, runAgentRefine } from "./agent.js";
 import { warmupRag } from "./rag.js";
-import { PROVIDERS, labelOf } from "./providers.js";
+import { labelOf } from "./providers.js";
+import { ALLOWED_ORIGINS, isAllowedRelayUrl, checkRedirect, buildCsp } from "./relay-allowlist.js";
 import { log } from "./logger.js";
 import { parseTraceReport, emitTraceReport } from "./trace.js";
 import { LS_ENABLED } from "./langsmith.js";
@@ -40,27 +41,8 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-// 安全响应头（XSS 收口 / 纵深防御）。connect-src 纳入各 LLM 厂商域名，
+// 安全响应头（XSS 收口 / 纵深防御）。connect-src 与 /relay 共用同一份白名单 origin，
 // 既允许「浏览器直连厂商」模式，又限制脚本只能向白名单域发起请求（阻断 XSS 外泄）。
-function buildCsp(): string {
-  const hosts = new Set<string>(["'self'"]);
-  for (const p of Object.values(PROVIDERS)) {
-    try { hosts.add(new URL((p as any).baseURL).origin); } catch { /* ignore */ }
-  }
-  const connect = [...hosts].join(" ");
-  return [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
-    "font-src 'self' data:",
-    `connect-src ${connect}`,
-    "base-uri 'self'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-    "object-src 'none'",
-  ].join("; ");
-}
 const CSP = buildCsp();
 const SEC_HEADERS = {
   "content-security-policy": CSP,
@@ -127,13 +109,21 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) 
 }
 
 // /relay：把 {url, method, headers, body} 转发，支持 SSE 流式回传。
-// 个人本地工具：relay 作为本机代理转发（如用户开启了代理时，服务端模型调用经此转发），不做 SSRF 白名单闸门。
+// 个人本地工具：relay 作为本机代理转发（如用户开启了代理时，服务端模型调用经此转发），仅转发已知模型厂商 origin（与 CSP 同源）。
 async function handleRelay(req: http.IncomingMessage, res: http.ServerResponse) {
   const raw = await readBody(req);
   let payload: any;
   try { payload = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
   const { url, method = "POST", headers = {}, body } = payload;
   if (!url) return sendJSON(res, 400, { error: "缺少 url" });
+
+  // 白名单闸门：仅放行已知厂商 origin；403 body 契约 { error, code, origin? }（前端 P0-3 依赖 code 前缀识别）。
+  const chk = isAllowedRelayUrl(url);
+  if (!chk.ok) return sendJSON(res, 403, {
+    error: chk.reason,
+    code: chk.code,
+    ...(chk.origin ? { origin: chk.origin } : {}),
+  });
 
   // 透传 headers 时清洗逐跳头，避免 host/content-length 冲突
   const fwd: Record<string, string> = { ...(headers as Record<string, string>) };
@@ -142,12 +132,15 @@ async function handleRelay(req: http.IncomingMessage, res: http.ServerResponse) 
   const ac = new AbortController();
   req.on("close", () => ac.abort());
   try {
-    const upstream = await fetch(url, {
+    const upstream = await fetch(chk.url.toString(), {
       method,
       headers: fwd,
       body: typeof body === "string" ? body : body ? JSON.stringify(body) : undefined,
       signal: ac.signal,
+      redirect: "manual", // 不自动跟随：3xx 一律拒绝，防止白名单域名被 302 引到内网
     });
+    const red = checkRedirect(upstream.status, upstream.headers.get("location"));
+    if (!red.ok) return sendJSON(res, 403, { error: red.reason, code: red.code });
     res.writeHead(upstream.status, {
       "content-type": upstream.headers.get("content-type") ?? "application/json",
       "access-control-allow-origin": corsOrigin(req),

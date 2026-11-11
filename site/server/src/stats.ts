@@ -167,6 +167,12 @@ export function isNoise(name: string): boolean {
   return NOISE_PATTERNS.some((p) => n.includes(p));
 }
 
+/** 是否为进程级遥测根 run（parent=null 的 `·attempt` / `llm:failover`），不计入业务调用次数。 */
+export function isTelemetryRoot(name: string): boolean {
+  const n = String(name ?? "");
+  return /·attempt$/i.test(n) || n === "llm:failover";
+}
+
 /** 是否为白名单 flow 名（主视图保留）。 */
 export function isWhitelistedFlow(name: string): boolean {
   return FLOW_WHITELIST.has(String(name ?? ""));
@@ -206,6 +212,7 @@ export function statusDistribution(runs: Array<{ status?: string }>): StatusDist
     if (s === "success") success++;
     else if (s === "error") error++;
     else if (s === "pending") pending++;
+    else pending++; // 未知/缺失 status 归入「未完成/未知」，保证 success+error+pending === total
   }
   return { success, error, pending, total: runs.length };
 }
@@ -453,8 +460,10 @@ async function fetchRootRuns(deps: StatsDeps, projectId: string): Promise<QueryO
   const allRuns = (r.json as { runs?: Array<{ name?: string; status?: string }> }).runs ?? [];
   // 过滤探针噪声：否则 rootRunCount / errorRate / pendingRate 会被探针残留污染
   // （2026-09-18 真机：17 条根 run 里 5 条是探针，pendingRate 23.5% 全来自探针，真实为 0）。
-  const runs = allRuns.filter((run) => !isNoise(run?.name ?? ""));
-  const filteredNoiseCount = allRuns.length - runs.length;
+  // `·attempt`/`llm:failover` 为进程级遥测，不计入业务调用次数；filteredNoiseCount 仍只数探针。
+  const withoutNoise = allRuns.filter((run) => !isNoise(run?.name ?? ""));
+  const filteredNoiseCount = allRuns.length - withoutNoise.length;
+  const runs = withoutNoise.filter((run) => !isTelemetryRoot(run?.name ?? ""));
   return { runs, filteredNoiseCount, partial: false, warnings: [] };
 }
 

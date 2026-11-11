@@ -162,12 +162,29 @@ export const LLM = (function () {
     const s = Store.getSettings();
     const base = (s.proxyBase && String(s.proxyBase).trim()) ? String(s.proxyBase).trim().replace(/\/$/, "") : "";
     if (s.useProxy && base) {
-      return fetch(base + "/relay", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url, method, headers, body: body === undefined ? null : body }),
-        signal
-      });
+      let r: Response;
+      try {
+        r = await fetch(base + "/relay", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url, method, headers, body: body === undefined ? null : body }),
+          signal
+        });
+      } catch (e) {
+        // 用户主动「停止生成」保持 AbortError 原语义，避免误导为后端故障
+        if (signal?.aborted || (e as any)?.name === "AbortError") throw e;
+        throw new Error(
+          "无法连接本地后端代理 " + base + "/relay：" + ((e as any)?.message || "网络不可达") +
+          "。请确认后端已启动（cd site/server && npm start），或到「设置」关闭『通过代理服务器调用』改为直连厂商。"
+        );
+      }
+      // 仅后端自己拒绝转发时转成可操作文案；厂商 403 原样返回，不改 body、不改既有提示
+      if (r.status === 403) {
+        const probe = r.clone();
+        const j = await probe.json().catch(() => null);
+        if (j && j.code && /^RELAY_/.test(j.code)) throw new Error(j.error || "代理拒绝转发该请求");
+      }
+      return r;
     }
     return fetch(url, {
       method,

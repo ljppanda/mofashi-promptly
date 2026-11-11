@@ -365,6 +365,13 @@ function renderError(msg: string): string {
     <div class="card card-pad" style="margin-top:12px;"><p class="muted" style="margin:0;">点击「重试」重新拉取；若持续失败，请确认后端已启动。</p></div>`;
 }
 
+// 顶部噪声提示条：N>0 才显示，N=0/null 返回空串（不出现「已过滤 0 条」）。
+export function renderNoiseBar(count: number | null): string {
+  return (count != null && count > 0)
+    ? `<div class="pill-amber" style="display:inline-block;padding:6px 12px;border-radius:10px;font-size:.8rem;margin-bottom:12px;">已过滤 ${esc(fmtInt(count))} 条探针噪声，不计入上方统计；调用次数不含重试与运维遥测记录</div>`
+    : "";
+}
+
 // —— 形态 3：正常 ——
 function renderReport(data: StatsResponse): string {
   const rawGroups = Array.isArray(data.groups) ? data.groups : [];
@@ -374,12 +381,14 @@ function renderReport(data: StatsResponse): string {
   const warnBar = data.partial
     ? `<div class="pill-amber" style="display:inline-block;padding:6px 12px;border-radius:10px;font-size:.8rem;margin-bottom:12px;">部分数据缺失：${esc((data.warnings || []).join("；") || "上游某项获取失败")}</div>`
     : "";
+  const noiseBar = renderNoiseBar(t.filteredNoiseCount);
 
   const ms = toEpochMs(data.generatedAt);
   const genAt = ms != null ? `生成于 ${esc(fmtDateTime(ms))}（${esc(fmtRelative(ms))}）` : "";
 
   return `
     ${warnBar}
+    ${noiseBar}
     <div class="flex items-center gap-2 flex-wrap" style="margin-bottom:12px;">
       <span class="pill pill-muted">范围：
         ${esc((RANGES.find((r) => r.k === currentRange) || { label: currentRange }).label)}
@@ -524,17 +533,12 @@ function renderTelemetry(t: StatTotals): string {
     : "";
   // 「含子调用」小字：runCount 是分组求和（含父 chain + llm 子 run），与上方 root 口径不同——纯文本标注，不用 tooltip。
   const withChildren = `<span class="muted" style="font-size:.72rem;">（含子调用）</span>`;
-  // 噪声提示：透明告知被过滤掉的探针条数（无则不显示）。
-  const noiseNote = (t.filteredNoiseCount != null && t.filteredNoiseCount > 0)
-    ? `<span class="muted" style="font-size:.72rem;">（已过滤 ${esc(fmtInt(t.filteredNoiseCount))} 条探针）</span>`
-    : "";
   const rows: Array<[string, string]> = [
     ["成功调用", esc(fmtInt(t.successCount))],
     ["失败调用", esc(fmtInt(t.errorCount))],
     ["未完成", esc(fmtInt(t.pendingCount)) + pendingNote],
     ["分组总和" + withChildren, esc(fmtInt(t.runCount))],
     ["P50 时延（分组近似）", esc(fmtLatency(t.latencyP50))],
-    ["噪声过滤", noiseNote || `<span class="muted">—</span>`],
   ];
   const html = rows.map(([k, v]) => `
     <div class="flex" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);">

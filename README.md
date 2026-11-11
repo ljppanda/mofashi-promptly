@@ -61,7 +61,7 @@ LANGSMITH_PROJECT=模法师-Promptly
 - **本机「用量看板」**（顶部导航进入）：按流程 / 按模型汇总**调用次数、token 消耗、成本、错误率与时延**，支持「今天 / 近 7 天 / 近 30 天 / 全部」切换，无需登录任何网站。
 - **LangSmith 官方站点**：看单条 run 的完整链路树与节点级明细。
 
-看板的错误率口径把「未完成（pending）」单独统计、不混入失败——进程被中断的 run 不等于业务失败。
+看板的错误率口径把「未完成（pending）」单独统计、不混入失败——进程被中断的 run 不等于业务失败。调用次数只统计业务流程根 run，重试与运维遥测记录（`·attempt` / `llm:failover`）单列、不重复计数；「模型请求」则按真实 LLM 请求累计（含重试）。
 
 ## 使用流程
 
@@ -74,7 +74,7 @@ LANGSMITH_PROJECT=模法师-Promptly
 ## 技术栈
 
 - **前端**：Vite + TypeScript（零运行时框架，hash 路由），Tailwind 构建期编译。
-- **后端**：Node 22 + `tsx`，无数据库；`/relay` 转发 LLM 请求，`/agent` 跑生成 / 优化状态机，`/agent/trace` 中转前端链路用量上报，`/agent/stats` 提供用量看板聚合数据。
+- **后端**：Node 22 + `tsx`，无数据库；`/relay` 转发 LLM 请求（仅放行已知厂商 origin，与 CSP 同源），`/agent` 跑生成 / 优化状态机，`/agent/trace` 中转前端链路用量上报，`/agent/stats` 提供用量看板聚合数据。
 - **RAG**：LanceDB + 词法 / 可选 bge 语义向量召回，语料为内置 102 模板。
 - **模型**：内置 19 家主流 LLM 服务商适配。
 - **可观测**：可选对接 LangSmith，按流程上报 token / 成本 / 耗时（默认关闭）；内置本机「用量看板」，按流程 / 模型汇总调用次数、token、成本、错误率与时延。
@@ -84,7 +84,7 @@ LANGSMITH_PROJECT=模法师-Promptly
 - API Key 仅存浏览器 `localStorage`，不上传任何服务器。
 - 后端无账号、无数据库；整个服务「拷走即跑」，天然契合数据不出域。
 - 唯一的对外上报是**可选**的 LangSmith 用量追踪（需自行填 Key 才生效，默认关闭）；上报内容为流程名、模型名、token 数与耗时，**不含提示词正文与 API Key**。
-- 代理 `/relay` 为本地转发用途，请勿将服务端口直接暴露到公网。
+- 代理 `/relay` 仅转发已知模型厂商域名（按 origin 校验，与 CSP `connect-src` 共用同一份白名单）；自定义服务商可在服务端 `.env` 配置 `RELAY_ALLOWED_ORIGINS` 扩展并重启。**仍不建议将服务端口直接暴露到公网**——Key 仍存于浏览器本地，且 `/relay` 本身无鉴权。
 
 ## 许可证
 
