@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { runAgent, runAgentUse, runAgentClarify, runAgentRefine } from "./agent.js";
 import { warmupRag } from "./rag.js";
 import { labelOf } from "./providers.js";
-import { ALLOWED_ORIGINS, isAllowedRelayUrl, checkRedirect, buildCsp } from "./relay-allowlist.js";
+import { isAllowedRelayUrl, checkRedirect, buildCsp } from "./relay-allowlist.js";
 import { log } from "./logger.js";
 import { parseTraceReport, emitTraceReport } from "./trace.js";
 import { LS_ENABLED } from "./langsmith.js";
