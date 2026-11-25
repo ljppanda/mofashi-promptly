@@ -27,8 +27,35 @@ jobs:
       - name: Type check (tsc --noEmit)
         run: npm run typecheck
 
+      - name: Corpus integrity (source ↔ templates.json)
+        run: npm run corpus:check
+
       - name: Unit tests (node:test, offline)
         run: npm test
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check frontend (tsc --noEmit)
+        run: npm run typecheck
+
+      - name: Build frontend (vite build)
+        run: npm run build
 
   docker:
     runs-on: ubuntu-latest
