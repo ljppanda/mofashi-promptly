@@ -112,6 +112,10 @@ export const LLM = (function () {
     return cfg();
   }
 
+  // 各厂商输出上限：与服务端 providers.ts 对齐（8192），避免长成品被 1500 截断。
+  // 文心 8k 模型总上下文只有 8k，输出上限单独收敛到 2048。
+  function outLimit(style) { return style === "ernie" ? 2048 : 8192; }
+
   function effectiveLabel(over?) {
     const c = resolveCfg(over);
     return c.providerLabel + " · " + c.model;
@@ -217,7 +221,7 @@ export const LLM = (function () {
     if (c.style === "claude") {
       const url = c.base + "/messages";
       const headers = { "x-api-key": c.key, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      const body = { model: c.model, max_tokens: 1500, system, messages: [{ role: "user", content: user }] };
+      const body = { model: c.model, max_tokens: outLimit(c.style), system, messages: [{ role: "user", content: user }] };
       const r = await relayFetch(url, "POST", headers, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
       const j = await r.json();
@@ -230,7 +234,7 @@ export const LLM = (function () {
       const body = {
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
       };
       const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
@@ -322,6 +326,29 @@ export const LLM = (function () {
     return { text: full, usage };
   }
 
+  // 文心一言原生流式：增量在 `result` 字段，usage 字段与 OpenAI 同名。
+  // 之前误用 streamOpenAI（只读 choices[0].delta.content）导致流式永远输出空文本。
+  async function streamErnie(url, body, onToken, signal) {
+    if (typeof onToken !== "function") onToken = () => {};
+    const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body, signal);
+    if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
+    let full = "";
+    let usage = null;
+    await readSSE(r, line => {
+      if (!line.startsWith("data:")) return;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") return;
+      try {
+        const j = JSON.parse(data);
+        const d = j.result ?? (j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content);
+        if (d) { full += d; onToken(d, false); }
+        if (j.usage) usage = normUsage(j.usage);
+      } catch (e) {}
+    }, signal);
+    onToken("", true);
+    return { text: full, usage };
+  }
+
   // Claude 流式：usage 分散在 message_start / message_delta
   async function streamClaude(url, headers, body, onToken, signal) {
     if (typeof onToken !== "function") onToken = () => {}; // 防空：F13 评测等场景会传 null
@@ -386,14 +413,14 @@ export const LLM = (function () {
     if (c.style === "claude") {
       const url = c.base + "/messages";
       const headers = { "x-api-key": c.key, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      const body = { model: c.model, max_tokens: 1500, system, stream: true, messages: [{ role: "user", content: user }] };
+      const body = { model: c.model, max_tokens: outLimit(c.style), system, stream: true, messages: [{ role: "user", content: user }] };
       res = await streamClaude(url, headers, body, onToken, signal);
     } else if (c.style === "gemini") {
       const url = c.base + "/models/" + encodeURIComponent(c.model) + ":streamGenerateContent?alt=sse&key=" + encodeURIComponent(c.key);
       const body = {
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
       };
       res = await streamGemini(url, body, onToken, signal);
     } else if (c.style === "ernie") {
@@ -405,7 +432,7 @@ export const LLM = (function () {
       if (!tokJson.access_token) throw new Error("获取百度 access_token 失败：" + (tokJson.error_description || tokJson.error || "未知"));
       const url = c.base + "/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + encodeURIComponent(c.model) + "?access_token=" + tokJson.access_token;
       const body = { messages: [{ role: "user", content: user }], system, temperature: 0.7, stream: true };
-      res = await streamOpenAI(url, { "content-type": "application/json" }, body, onToken, signal);
+      res = await streamErnie(url, body, onToken, signal);
     } else {
       const url = c.base + "/chat/completions";
       const headers = { "authorization": "Bearer " + c.key, "content-type": "application/json" };
@@ -564,14 +591,14 @@ export const LLM = (function () {
     if (c.style === "claude") {
       const url = c.base + "/messages";
       const headers = { "x-api-key": c.key, "anthropic-version": "2023-06-01", "content-type": "application/json" };
-      const body = { model: c.model, max_tokens: 1500, system: promptText, stream: true, messages: hist.map(m => ({ role: m.role, content: m.content })) };
+      const body = { model: c.model, max_tokens: outLimit(c.style), system: promptText, stream: true, messages: hist.map(m => ({ role: m.role, content: m.content })) };
       res = await streamClaude(url, headers, body, onToken, signal);
     } else if (c.style === "gemini") {
       const url = c.base + "/models/" + encodeURIComponent(c.model) + ":streamGenerateContent?alt=sse&key=" + encodeURIComponent(c.key);
       const body = {
         systemInstruction: { parts: [{ text: promptText }] },
         contents: hist.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-        generationConfig: { temperature: 0.7, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
       };
       res = await streamGemini(url, body, onToken, signal);
     } else if (c.style === "ernie") {
@@ -583,7 +610,7 @@ export const LLM = (function () {
       if (!tokJson.access_token) throw new Error("获取百度 access_token 失败：" + (tokJson.error_description || tokJson.error || "未知"));
       const url = c.base + "/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + encodeURIComponent(c.model) + "?access_token=" + tokJson.access_token;
       const body = { messages: hist.map(m => ({ role: m.role, content: m.content })), system: promptText, temperature: 0.7, stream: true };
-      res = await streamOpenAI(url, { "content-type": "application/json" }, body, onToken, signal);
+      res = await streamErnie(url, body, onToken, signal);
     } else {
       const url = c.base + "/chat/completions";
       const headers = { "authorization": "Bearer " + c.key, "content-type": "application/json" };
