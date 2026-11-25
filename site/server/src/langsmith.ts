@@ -26,6 +26,13 @@ export const LS_ENABLED: boolean = EXPLICIT !== undefined
 // 模块级单例状态：已解析的项目 id（并发去重由 createEnsureProject 内部 inflight 负责）。
 let projectId: string | null = null;
 
+// 可观测层是「尽力而为」：任何一次上报都必须有硬超时，绝不能拖住生成主链路。
+const LS_TIMEOUT_MS = Number(process.env.LANGSMITH_TIMEOUT_MS ?? 3000);
+
+// 已发出但尚未完成的 create run 请求。lsEnd 在后台等待它完成再 PATCH，避免
+// 「PATCH 先于 POST 到达 → 404」的竞态；对调用方仍然零等待。
+const pendingCreates = new Map<string, Promise<boolean>>();
+
 // ensureProject 的可注入依赖（供离线单测；默认走真实 fetch + 模块常量）。
 export interface EnsureProjectDeps {
   enabled: boolean;                              // LS_ENABLED
@@ -43,7 +50,7 @@ function defaultEnsureDeps(): EnsureProjectDeps {
     endpoint: ENDPOINT,
     project: PROJECT,
     fetchRaw: async (url, init) => {
-      const r = await fetch(url, init);
+      const r = await fetch(url, { ...init, signal: AbortSignal.timeout(LS_TIMEOUT_MS) });
       const text = await r.text();
       return { status: r.status, ok: r.ok, text };
     },
@@ -121,6 +128,9 @@ export async function ensureProject(): Promise<string | null> {
 // ⚠️ pid（project_id）为 null 时的行为：**照常上报**，只是省略 project_id 字段、
 //    改由 `session_name: PROJECT` 让 LangSmith 按项目名落到默认项目（L79-80）。
 //    即「pid 为 null 仍会上报」，并非静默不上报 —— 这也是过去 ensureProject 返 null 时上报看似仍正常的原因。
+//
+// 性能约定：id 在本地同步生成、网络 POST 在后台完成，函数立即返回。
+// 这样父 run / 子 run 的 id 关系不受网络抖动影响，生成链路也不会被观测层拖慢。
 export async function lsStart(
   name: string,
   runType: "chain" | "llm" | "tool",
@@ -129,29 +139,33 @@ export async function lsStart(
   metadata?: Record<string, unknown>,
 ): Promise<string | null> {
   if (!LS_ENABLED) return null;
-  try {
-    const pid = await ensureProject();
-    const id = globalThis.crypto.randomUUID();
-    const r = await fetch(`${ENDPOINT}/runs`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-api-key": KEY! },
-      body: JSON.stringify({
-        id,
-        name,
-        run_type: runType,
-        inputs,
-        parent_run_id: parentRunId || undefined,
-        project_id: pid || undefined,
-        session_name: PROJECT,
-        start_time: new Date().toISOString(),
-        extra: metadata ? { metadata } : undefined,
-      }),
-    });
-    if (!r.ok) return null;
-    return id;
-  } catch {
-    return null;
-  }
+  const id = globalThis.crypto.randomUUID();
+  const create = (async (): Promise<boolean> => {
+    try {
+      const pid = await ensureProject();
+      const r = await fetch(`${ENDPOINT}/runs`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-api-key": KEY! },
+        signal: AbortSignal.timeout(LS_TIMEOUT_MS),
+        body: JSON.stringify({
+          id,
+          name,
+          run_type: runType,
+          inputs,
+          parent_run_id: parentRunId || undefined,
+          project_id: pid || undefined,
+          session_name: PROJECT,
+          start_time: new Date().toISOString(),
+          extra: metadata ? { metadata } : undefined,
+        }),
+      });
+      return r.ok;
+    } catch {
+      return false;
+    }
+  })();
+  pendingCreates.set(id, create);
+  return id;
 }
 
 // 结束一条 run（写 outputs / error / token 标准字段）；id 为空直接跳过。
@@ -161,7 +175,8 @@ export async function lsStart(
 //   - extra.metadata.ls_provider / ls_model_name / ls_model_type ← 成本估算必需
 //     （官方：缺 ls_model_name 时 token 可能仍记录，但 cost 不会估算）
 // 兼容策略：保留原有 outputs 与 extra.metadata（旧面板），只做「有则补、无则略」，绝不抛错。
-export async function lsEnd(
+// 性能约定：返回已 resolve 的 Promise，网络 PATCH 在后台完成；调用方 await 也不会等待网络。
+export function lsEnd(
   id: string | null,
   opts: {
     outputs?: unknown;
@@ -172,39 +187,48 @@ export async function lsEnd(
     model?: string;
   } = {},
 ): Promise<void> {
-  if (!LS_ENABLED || !id) return;
-  try {
-    // outputs：若上游已给对象则合并 usage_metadata；否则以 usage_metadata 为 outputs。
-    const usageMeta = toUsageMetadata(opts.usage);
-    let outputs = opts.outputs;
-    if (usageMeta) {
-      outputs = (opts.outputs && typeof opts.outputs === "object" && !Array.isArray(opts.outputs))
-        ? { ...(opts.outputs as Record<string, unknown>), usage_metadata: usageMeta }
-        : { usage_metadata: usageMeta };
+  if (!LS_ENABLED || !id) return Promise.resolve();
+  const create = pendingCreates.get(id);
+  void (async () => {
+    try {
+      const ok = create ? await create : true;
+      pendingCreates.delete(id);
+      if (!ok) return; // create 都没成功，PATCH 必然 404，直接放弃
+
+      // outputs：若上游已给对象则合并 usage_metadata；否则以 usage_metadata 为 outputs。
+      const usageMeta = toUsageMetadata(opts.usage);
+      let outputs = opts.outputs;
+      if (usageMeta) {
+        outputs = (opts.outputs && typeof opts.outputs === "object" && !Array.isArray(opts.outputs))
+          ? { ...(opts.outputs as Record<string, unknown>), usage_metadata: usageMeta }
+          : { usage_metadata: usageMeta };
+      }
+
+      const lsModelMetadata = opts.lsModelMetadata;
+
+      // extra.metadata：合并上游 metadata 与 ls_* 模型元数据（ls_* 放后即优先生效）。
+      const extra: Record<string, unknown> = {};
+      const merged = { ...(opts.metadata ?? {}), ...(lsModelMetadata ?? {}) };
+      if (Object.keys(merged).length) extra.metadata = merged;
+      // 双写 usage_metadata 到 extra.metadata（SDK anthropic 路径即写此处）。
+      if (usageMeta) extra.metadata = { ...(extra.metadata ?? {}), usage_metadata: usageMeta };
+
+      await fetch(`${ENDPOINT}/runs/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-api-key": KEY! },
+        signal: AbortSignal.timeout(LS_TIMEOUT_MS),
+        body: JSON.stringify({
+          outputs,
+          error: opts.error || null,
+          end_time: new Date().toISOString(),
+          extra: Object.keys(extra).length ? extra : undefined,
+        }),
+      });
+    } catch {
+      /* 上报失败不影响主链路 */
     }
-
-    const lsModelMetadata = opts.lsModelMetadata;
-
-    // extra.metadata：合并上游 metadata 与 ls_* 模型元数据（ls_* 放后即优先生效）。
-    const extra: Record<string, unknown> = {};
-    const merged = { ...(opts.metadata ?? {}), ...(lsModelMetadata ?? {}) };
-    if (Object.keys(merged).length) extra.metadata = merged;
-    // 双写 usage_metadata 到 extra.metadata（SDK anthropic 路径即写此处）。
-    if (usageMeta) extra.metadata = { ...(extra.metadata ?? {}), usage_metadata: usageMeta };
-
-    await fetch(`${ENDPOINT}/runs/${id}`, {
-      method: "PATCH",
-      headers: { "content-type": "application/json", "x-api-key": KEY! },
-      body: JSON.stringify({
-        outputs,
-        error: opts.error || null,
-        end_time: new Date().toISOString(),
-        extra: Object.keys(extra).length ? extra : undefined,
-      }),
-    });
-  } catch {
-    /* 上报失败不影响主链路 */
-  }
+  })();
+  return Promise.resolve();
 }
 
 // 便捷包裹：把一段 async 逻辑包成带 trace 的父 chain run，成功/失败都正确结 run。返回原值。
