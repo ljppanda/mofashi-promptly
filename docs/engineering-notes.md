@@ -65,6 +65,8 @@ LangSmith 上报原本 `await` 在生成请求的关键路径上，且 `fetch` �
 - 补上 entrypoint 引用但不存在的 `backup-scheduler.mjs`（原子写 + 保留 N 份）。
 - 服务端默认 `HOST=127.0.0.1`；`/relay` 支持 `RELAY_TOKEN`；body 上限 2MB；静态路径用
   `path.relative` 做包含校验；`decodeURIComponent` 异常返回 400 而非未捕获 rejection。
+- 请求体超限走 `drain` 而不是 `destroy`：后者会连响应一起掐断，客户端只看到连接重置，
+  拿不到 413。该逻辑抽到 `http-body.ts` 并有 4 条离线单测。
 
 ## 7. 仍然存在的限制（诚实清单）
 

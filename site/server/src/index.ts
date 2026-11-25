@@ -17,6 +17,7 @@ import { log } from "./logger.js";
 import { parseTraceReport, emitTraceReport } from "./trace.js";
 import { LS_ENABLED } from "./langsmith.js";
 import { getStatsCached } from "./stats.js";
+import { readBodyWithLimit } from "./http-body.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // 静态根：优先使用 Vite 生产构建产物（dist/）；未构建时回退到源码根（仅便于未打包时仍跑得起来，但 TS 模块不会被转译，需走 vite dev）。
@@ -83,33 +84,7 @@ function sendJSON(res: http.ServerResponse, code: number, obj: unknown) {
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let settled = false;
-    const fail = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      reject(err);
-    };
-    req.on("data", (c: Buffer) => {
-      if (settled) return;
-      size += c.length;
-      if (size > MAX_BODY_BYTES) {
-        const err = Object.assign(new Error(`请求体超过上限（${MAX_BODY_BYTES} bytes）`), { code: "BODY_TOO_LARGE" });
-        fail(err);
-        req.destroy();
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on("end", () => {
-      if (settled) return;
-      settled = true;
-      resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-    req.on("error", (err) => fail(err));
-  });
+  return readBodyWithLimit(req, MAX_BODY_BYTES);
 }
 
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {

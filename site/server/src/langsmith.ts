@@ -165,6 +165,10 @@ export async function lsStart(
     }
   })();
   pendingCreates.set(id, create);
+  // 兜底清理：正常路径由 lsEnd 删除；若调用方漏掉 lsEnd（异常/提前 return），
+  // 60s 后丢弃这一项，避免 Map 无界增长。unref 保证定时器不阻止进程退出。
+  const ttl = setTimeout(() => pendingCreates.delete(id), 60_000);
+  (ttl as any).unref?.();
   return id;
 }
 
