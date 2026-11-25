@@ -6,28 +6,63 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { withRetry, resolveFallbacks } from "../src/providers.js";
+import { withRetry, resolveFallbacks, statusOf, tokenLimitField } from "../src/providers.js";
 import { getPrompt, latestVersion, PROMPT_VERSIONS } from "../src/prompts.js";
 
 // ---------------- 重试退避分类 ----------------
-test("withRetry: 可重试错误(5xx)会重试并最终成功", async () => {
+// 回归重点：生产错误格式是 `[OpenAI] 500 ...`（方括号里是厂商名），
+// 旧实现用 /\[(\d{3})\]/ 只认 `[500]`，导致真实 5xx/429 永不重试。
+test("statusOf: 解析生产错误格式 `[OpenAI] 500 ...`", () => {
+  assert.equal(statusOf(new Error("[OpenAI] 500 internal server error")), 500);
+  assert.equal(statusOf(new Error("[DeepSeek] 429 rate limited")), 429);
+  assert.equal(statusOf(new Error("[Kimi] 401 unauthorized")), 401);
+  assert.equal(statusOf(new Error("[Gemini] 503 unavailable")), 503);
+});
+
+test("statusOf: 优先读取结构化 status 字段", () => {
+  assert.equal(statusOf(Object.assign(new Error("upstream failed"), { status: 502 })), 502);
+  assert.equal(statusOf(Object.assign(new Error("x"), { response: { status: 504 } })), 504);
+  assert.equal(statusOf(new Error("no status here")), null);
+});
+
+test("withRetry: 真实 5xx 错误会重试并最终成功", async () => {
   let n = 0;
   const r = await withRetry(async () => {
     n++;
-    if (n < 3) throw new Error("[500] server error");
+    if (n < 3) throw new Error("[OpenAI] 500 server error");
     return "ok";
   }, { baseMs: 1, maxMs: 2, maxRetries: 3 });
   assert.equal(r, "ok");
   assert.equal(n, 3);
 });
 
+test("withRetry: 真实 429 限流会重试", async () => {
+  let n = 0;
+  const r = await withRetry(async () => {
+    n++;
+    if (n < 2) throw new Error("[DeepSeek] 429 rate limited");
+    return "ok";
+  }, { baseMs: 1, maxMs: 2, maxRetries: 3 });
+  assert.equal(r, "ok");
+  assert.equal(n, 2);
+});
+
 test("withRetry: 不可重试错误(400)立即抛出不重试", async () => {
   let n = 0;
   await assert.rejects(
-    async () => withRetry(async () => { n++; throw new Error("[400] bad request"); }, { baseMs: 1, maxMs: 2, maxRetries: 3 }),
+    async () => withRetry(async () => { n++; throw new Error("[OpenAI] 400 bad request"); }, { baseMs: 1, maxMs: 2, maxRetries: 3 }),
     /400/,
   );
   assert.equal(n, 1, "400 不应重试");
+});
+
+test("withRetry: 401 鉴权错误不重试", async () => {
+  let n = 0;
+  await assert.rejects(
+    async () => withRetry(async () => { n++; throw new Error("[OpenAI] 401 invalid api key"); }, { baseMs: 1, maxMs: 2, maxRetries: 3 }),
+    /401/,
+  );
+  assert.equal(n, 1, "401 不应重试");
 });
 
 test("withRetry: 网络错误被视为可重试", async () => {
@@ -40,20 +75,40 @@ test("withRetry: 网络错误被视为可重试", async () => {
 test("withRetry: 超出重试上限后抛出最后错误", async () => {
   let n = 0;
   await assert.rejects(
-    async () => withRetry(async () => { n++; throw new Error("[503] unavailable"); }, { baseMs: 1, maxMs: 2, maxRetries: 2 }),
+    async () => withRetry(async () => { n++; throw new Error("[OpenAI] 503 unavailable"); }, { baseMs: 1, maxMs: 2, maxRetries: 2 }),
     /503/,
   );
   assert.equal(n, 3, "应尝试 1 次 + 重试 2 次 = 3 次");
 });
 
-test("withRetry: AbortError(超时/用户停止)不重试", async () => {
-  // 守 bugfix：超时/停止产生的 AbortError 不应被当作可重试错误空等 90s×N
+test("withRetry: AbortError(用户停止)不重试", async () => {
+  // 守 bugfix：用户主动停止产生的 AbortError 不应被当作可重试错误空等
   let n = 0;
   await assert.rejects(
     async () => withRetry(async () => { n++; throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" }); }, { baseMs: 1, maxMs: 2, maxRetries: 3 }),
     /aborted/,
   );
   assert.equal(n, 1, "AbortError 不应重试");
+});
+
+test("withRetry: TimeoutError(服务端超时)可重试", async () => {
+  // 超时与用户停止必须区分：超时值得重试，用户停止不值得。
+  let n = 0;
+  const r = await withRetry(async () => {
+    n++;
+    if (n < 2) throw Object.assign(new Error("模型调用超时"), { name: "TimeoutError" });
+    return "ok";
+  }, { baseMs: 1, maxMs: 2, maxRetries: 3 });
+  assert.equal(r, "ok");
+  assert.equal(n, 2);
+});
+
+test("tokenLimitField: o 系列 / gpt-5 使用 max_completion_tokens", () => {
+  assert.equal(tokenLimitField("o1-mini"), "max_completion_tokens");
+  assert.equal(tokenLimitField("o3"), "max_completion_tokens");
+  assert.equal(tokenLimitField("gpt-5"), "max_completion_tokens");
+  assert.equal(tokenLimitField("gpt-4o-mini"), "max_tokens");
+  assert.equal(tokenLimitField("deepseek-chat"), "max_tokens");
 });
 
 // ---------------- 主备解析 ----------------

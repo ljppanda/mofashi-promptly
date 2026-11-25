@@ -103,6 +103,14 @@ export interface ChatResult {
 }
 
 // ---- SSE 行解析 ----
+// 语义约定：signal.aborted 表示「本次输出不完整」，必须抛 AbortError 让上层感知，
+// 不能把半截文本当成功返回（否则 F2 会接受被截断的提示词）。
+function abortError(): Error {
+  const e = new Error("stream aborted");
+  e.name = "AbortError";
+  return e;
+}
+
 async function readSSE(r: Response, onLine: (line: string) => void, signal?: AbortSignal): Promise<void> {
   if (!r.body) throw new Error("无响应体");
   const reader = r.body.getReader();
@@ -110,7 +118,7 @@ async function readSSE(r: Response, onLine: (line: string) => void, signal?: Abo
   let buf = "";
   try {
     while (true) {
-      if (signal?.aborted) break;
+      if (signal?.aborted) throw abortError();
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
@@ -171,12 +179,17 @@ async function ernieToken(apiKey: string, secret: string, signal?: AbortSignal):
 }
 
 // ---- OpenAI 兼容流式 ----
+// o 系列 / gpt-5 系列只接受 max_completion_tokens，传 max_tokens 会被 400 拒绝。
+export function tokenLimitField(model: string): "max_tokens" | "max_completion_tokens" {
+  return /^(o[1-9]|gpt-5)/i.test(model) ? "max_completion_tokens" : "max_tokens";
+}
+
 async function streamOpenAI(p: ProviderDef, model: string, key: string, opts: ChatOpts): Promise<ChatResult> {
   const url = `${p.baseURL}/chat/completions`;
   const body = {
     model,
     stream: true,
-    max_tokens: 8192,
+    [tokenLimitField(model)]: 8192,
     stream_options: { include_usage: true },
     messages: [
       { role: "system", content: opts.system },
@@ -289,16 +302,23 @@ async function streamErnie(p: ProviderDef, model: string, key: string, secret: s
   return { text, usage: normUsage(usage), elapsedMs: 0 };
 }
 
-// 从错误信息里解析上游 HTTP 状态码（stream* 抛出的错误形如 `[标签] 500 ...`）。
-function statusOf(err: unknown): number | null {
-  const m = /\[(\d{3})\]/.exec(String((err as any)?.message ?? err));
+// 从错误里解析上游 HTTP 状态码。
+// 生产错误形如 `[OpenAI] 500 ...`（方括号里是厂商名，不是状态码），
+// 因此不能只匹配 `[500]`；优先读结构化的 err.status，其次在文案里找 4xx/5xx。
+export function statusOf(err: unknown): number | null {
+  const e = err as any;
+  const direct = Number(e?.status ?? e?.statusCode ?? e?.response?.status);
+  if (Number.isInteger(direct) && direct >= 400 && direct <= 599) return direct;
+  const m = /\b([45]\d{2})\b/.exec(String(e?.message ?? err));
   return m ? Number(m[1]) : null;
 }
 
 // 判断错误是否值得重试：超时/网络故障/限流(429)/5xx 可重试；4xx 鉴权或参数错误不可重试。
 function isRetryable(err: unknown): boolean {
   if (!err) return false;
-  if ((err as any)?.name === "AbortError") return false; // 超时/用户停止：不重试（message 正则里的 aborted 字样会误判，这里显式覆盖）
+  const name = (err as any)?.name;
+  if (name === "AbortError") return false; // 用户停止：不重试
+  if (name === "TimeoutError") return true; // 服务端超时：值得重试（与用户停止区分）
   const e = err as any;
   const msg = String(e?.message ?? e);
   if (/fetch failed|ECONN|ENOTFOUND|ETIMEDOUT|ECONNRESET|network|socket|aborted|timeout|undici/i.test(msg)) return true;
@@ -358,7 +378,8 @@ async function chatPrimary(opts: ChatOpts, childName: string): Promise<ChatResul
     : null;
   const ctrl = new AbortController();
   const TIMEOUT_MS = 600_000; // 总兜底 10 分钟：F2 超长成品生成（6000+ tokens）耗时可达 3min+，180s 会误杀持续输出；流式持续输出不中断，真卡住才到点
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, TIMEOUT_MS);
   if (opts.signal) {
     if (opts.signal.aborted) ctrl.abort();
     else opts.signal.addEventListener("abort", () => ctrl.abort(), { once: true });
@@ -375,8 +396,12 @@ async function chatPrimary(opts: ChatOpts, childName: string): Promise<ChatResul
     }
   } catch (err) {
     // 失败路径：结 run（填 error）。不吞异常，交回上层决定重试/主备。
-    await lsEnd(childId, { error: String((err as any)?.message || err) });
-    throw err;
+    // 超时与「用户主动停止」必须区分：前者可重试，后者不可。
+    const finalErr = timedOut
+      ? Object.assign(new Error(`模型调用超时（${TIMEOUT_MS}ms）`), { name: "TimeoutError", cause: err })
+      : err;
+    await lsEnd(childId, { error: String((finalErr as any)?.message || finalErr) });
+    throw finalErr;
   } finally {
     clearTimeout(timer);
   }
