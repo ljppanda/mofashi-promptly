@@ -75,6 +75,7 @@ export interface ChatOpts {
   apiSecret?: string; // 文心用
   system: string;
   user: string;
+  temperature?: number; // 采样温度；裁判/评测建议 0，生成默认 0.7
   jsonMode?: boolean; // 强制模型输出合法 JSON（OpenAI 兼容 response_format: {type:"json_object"}）
   onToken?: (t: string) => void;
   onReasoning?: (t: string) => void; // 模型思维链（reasoning_content / thinking_delta / thought）流式回调，用于前端实时展示“思考过程”
@@ -189,6 +190,7 @@ async function streamOpenAI(p: ProviderDef, model: string, key: string, opts: Ch
   const body = {
     model,
     stream: true,
+    temperature: opts.temperature ?? 0.7,
     [tokenLimitField(model)]: 8192,
     stream_options: { include_usage: true },
     messages: [
@@ -225,6 +227,7 @@ async function streamClaude(p: ProviderDef, model: string, key: string, opts: Ch
   const body = {
     model,
     max_tokens: 4096,
+    temperature: opts.temperature ?? 0.7,
     stream: true,
     system: opts.system,
     messages: [{ role: "user", content: opts.user }],
@@ -252,6 +255,7 @@ async function streamGemini(p: ProviderDef, model: string, key: string, opts: Ch
   const body = {
     systemInstruction: { parts: [{ text: opts.system }] },
     contents: [{ role: "user", parts: [{ text: opts.user }] }],
+    generationConfig: { temperature: opts.temperature ?? 0.7 },
   };
   const r = await doFetch(url, "POST", { "content-type": "application/json" }, body, opts.signal, opts.proxyBase);
   if (!r.ok) throw new Error(`[${p.label}] ${r.status} ${await r.text().catch(() => "")}`);
@@ -282,6 +286,7 @@ async function streamErnie(p: ProviderDef, model: string, key: string, secret: s
   const url = `${p.baseURL}/${model}?access_token=${encodeURIComponent(token)}`;
   const body = {
     stream: true,
+    temperature: opts.temperature ?? 0.7,
     messages: [
       { role: "system", content: opts.system },
       { role: "user", content: opts.user },
@@ -495,6 +500,7 @@ export async function chatWithTools(opts: {
   proxyBase?: string;
   system: string;
   user: string;
+  temperature?: number;
   jsonMode?: boolean; // 强制模型输出合法 JSON（OpenAI 兼容 response_format: {type:"json_object"}）
   tools: unknown[];
   signal?: AbortSignal;
@@ -510,6 +516,7 @@ export async function chatWithTools(opts: {
     const body = {
       model: opts.model,
       stream: false,
+      temperature: opts.temperature ?? 0.7,
       messages: [
         { role: "system", content: opts.system },
         { role: "user", content: opts.user },

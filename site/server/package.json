@@ -12,6 +12,7 @@
     "eval": "tsx scripts/eval_all.ts",
     "eval:rag": "tsx scripts/eval_rag.ts",
     "eval:chain": "tsx scripts/eval_chain.ts",
+    "eval:chain:dry": "tsx scripts/eval_chain.ts --dry-run",
     "corpus:build": "node scripts/build-corpus.mjs",
     "corpus:check": "node scripts/validate-corpus.mjs",
     "test": "node scripts/validate-corpus.mjs && tsx --test tests/*.test.ts"

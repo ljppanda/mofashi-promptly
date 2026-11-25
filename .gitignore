@@ -51,6 +51,7 @@ ARCH-agent.md
 # 评测跑出来的报告（会重生成，不进版本库；eval_chain_report.md 同理未跟踪）
 site/server/scripts/eval_rag_report.md
 site/server/scripts/eval_chain_report.md
+site/server/scripts/eval_chain_report.json
 
 # ============ 本地杂项 / 生成产物（不进版本库） ============
 # 功能验证用的截图脚本与图片，非源码

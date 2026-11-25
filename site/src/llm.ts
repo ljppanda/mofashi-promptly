@@ -107,9 +107,12 @@ export const LLM = (function () {
       const model = (over.customModel && over.customModel.trim()) || over.model || p.default;
       // key/secret 缺失时回退当前已保存设置：同厂商覆盖（如优化闭环指定裁判模型）无需重复填 Key 即生效；跨厂商仍按需报「未配置 Key」
       const cur = cfg();
-      return { key: over.key ?? cur.key, secret: over.secret ?? cur.secret, style: p.style, base: p.base, model, provider: over.provider, providerLabel: p.label };
+      const out: any = { key: over.key ?? cur.key, secret: over.secret ?? cur.secret, style: p.style, base: p.base, model, provider: over.provider, providerLabel: p.label };
+      if (typeof over.temperature === "number") out.temperature = over.temperature;
+      return out;
     }
-    return cfg();
+    const base = cfg();
+    return (over && typeof over.temperature === "number") ? { ...base, temperature: over.temperature } : base;
   }
 
   // 各厂商输出上限：与服务端 providers.ts 对齐（8192），避免长成品被 1500 截断。
@@ -234,7 +237,7 @@ export const LLM = (function () {
       const body = {
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
+        generationConfig: { temperature: c.temperature ?? 0.7, maxOutputTokens: outLimit(c.style) }
       };
       const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
@@ -256,7 +259,7 @@ export const LLM = (function () {
       const tokJson = await tokRes.json();
       if (!tokJson.access_token) throw new Error("获取百度 access_token 失败：" + (tokJson.error_description || tokJson.error || "未知"));
       const url = c.base + "/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + encodeURIComponent(c.model) + "?access_token=" + tokJson.access_token;
-      const body = { messages: [{ role: "user", content: user }], system, temperature: 0.7 };
+      const body = { messages: [{ role: "user", content: user }], system, temperature: c.temperature ?? 0.7 };
       const r = await relayFetch(url, "POST", { "content-type": "application/json" }, body);
       if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
       const j = await r.json();
@@ -267,7 +270,7 @@ export const LLM = (function () {
     // openai 兼容（多数国内/海外厂商）
     const url = c.base + "/chat/completions";
     const headers = { "authorization": "Bearer " + c.key, "content-type": "application/json" };
-    const body = { model: c.model, temperature: 0.7, messages: [{ role: "system", content: system }, { role: "user", content: user }] };
+    const body = { model: c.model, temperature: c.temperature ?? 0.7, messages: [{ role: "system", content: system }, { role: "user", content: user }] };
     const r = await relayFetch(url, "POST", headers, body);
     if (!r.ok) { const t = await r.text(); throw new Error("API 错误 " + r.status + "：" + t.slice(0, 200)); }
     const j = await r.json();
@@ -420,7 +423,7 @@ export const LLM = (function () {
       const body = {
         systemInstruction: { parts: [{ text: system }] },
         contents: [{ role: "user", parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
+        generationConfig: { temperature: c.temperature ?? 0.7, maxOutputTokens: outLimit(c.style) }
       };
       res = await streamGemini(url, body, onToken, signal);
     } else if (c.style === "ernie") {
@@ -431,12 +434,12 @@ export const LLM = (function () {
       const tokJson = await tokRes.json();
       if (!tokJson.access_token) throw new Error("获取百度 access_token 失败：" + (tokJson.error_description || tokJson.error || "未知"));
       const url = c.base + "/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + encodeURIComponent(c.model) + "?access_token=" + tokJson.access_token;
-      const body = { messages: [{ role: "user", content: user }], system, temperature: 0.7, stream: true };
+      const body = { messages: [{ role: "user", content: user }], system, temperature: c.temperature ?? 0.7, stream: true };
       res = await streamErnie(url, body, onToken, signal);
     } else {
       const url = c.base + "/chat/completions";
       const headers = { "authorization": "Bearer " + c.key, "content-type": "application/json" };
-      const body = { model: c.model, temperature: 0.7, stream: true, messages: [{ role: "system", content: system }, { role: "user", content: user }] };
+      const body = { model: c.model, temperature: c.temperature ?? 0.7, stream: true, messages: [{ role: "system", content: system }, { role: "user", content: user }] };
       res = await streamOpenAI(url, headers, body, onToken, signal);
     }
     return { text: res.text, usage: res.usage, elapsedMs: Date.now() - start };
@@ -598,7 +601,7 @@ export const LLM = (function () {
       const body = {
         systemInstruction: { parts: [{ text: promptText }] },
         contents: hist.map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
-        generationConfig: { temperature: 0.7, maxOutputTokens: outLimit(c.style) }
+        generationConfig: { temperature: c.temperature ?? 0.7, maxOutputTokens: outLimit(c.style) }
       };
       res = await streamGemini(url, body, onToken, signal);
     } else if (c.style === "ernie") {
@@ -609,12 +612,12 @@ export const LLM = (function () {
       const tokJson = await tokRes.json();
       if (!tokJson.access_token) throw new Error("获取百度 access_token 失败：" + (tokJson.error_description || tokJson.error || "未知"));
       const url = c.base + "/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/" + encodeURIComponent(c.model) + "?access_token=" + tokJson.access_token;
-      const body = { messages: hist.map(m => ({ role: m.role, content: m.content })), system: promptText, temperature: 0.7, stream: true };
+      const body = { messages: hist.map(m => ({ role: m.role, content: m.content })), system: promptText, temperature: c.temperature ?? 0.7, stream: true };
       res = await streamErnie(url, body, onToken, signal);
     } else {
       const url = c.base + "/chat/completions";
       const headers = { "authorization": "Bearer " + c.key, "content-type": "application/json" };
-      const body = { model: c.model, temperature: 0.7, stream: true, messages: [{ role: "system", content: promptText }, ...hist.map(m => ({ role: m.role, content: m.content }))] };
+      const body = { model: c.model, temperature: c.temperature ?? 0.7, stream: true, messages: [{ role: "system", content: promptText }, ...hist.map(m => ({ role: m.role, content: m.content }))] };
       res = await streamOpenAI(url, headers, body, onToken, signal);
     }
     const out = { text: res.text, usage: res.usage, elapsedMs: Date.now() - start };

@@ -244,6 +244,11 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
   async function run(): Promise<void> {
     const goals = goalsEl.value.split("\n").map((s) => s.trim()).filter(Boolean);
     if (!goals.length) { toast("请至少填一个测试目标"); return; }
+    // 调参集 / 留出集划分：每 3 个目标抽 1 个作为 holdout。
+    // 改写依据只来自 dev；最终涨分以 holdout 为准，避免「用同一批题证明优化有效」。
+    const hasHoldout = goals.length >= 4;
+    const devGoals = hasHoldout ? goals.filter((_, i) => i % 3 !== 0) : goals.slice();
+    const holdGoals = hasHoldout ? goals.filter((_, i) => i % 3 === 0) : [];
     const threshold = Number((document.getElementById("opt-th") as HTMLInputElement).value) || 14;
     // 裁判：必须用「另一个厂商」的模型独立打分，Key 也用该厂商自己的（resolveCfg 支持 over.key 覆盖）。
     // 同厂商模型训练同源、偏好相近，自己给自己打分会系统性虚高，故默认禁止。
@@ -319,21 +324,28 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
       if (stageTimer) stageTimer.textContent = `已用时 ${mm}:${ss}`;
     }, 1000);
     if (stageBox) stageBox.style.display = "flex";
-    try {
-      setStage(`🚀 已启动评测（共 ${goals.length} 个样本，每个需 3 次模型调用，通常共需 1–4 分钟，请勿关闭弹窗）`);
-      progEl.textContent = `评测原版 0/${goals.length}…`;
-      const orig = await judgeSamples(t, goals, {}, judgeOver,
+    // 统一评测一个目标集合，返回聚合结果；进度/阶段文案由 phase 区分。
+    const runSet = async (tpl: any, setGoals: string[], phase: string) => {
+      progEl.textContent = `${phase} 0/${setGoals.length}…`;
+      const results = await judgeSamples(tpl, setGoals, {}, judgeOver,
         (done, total, r) => {
           const sc = (r && typeof r.total === "number") ? `（本样本 ${(r.total as number).toFixed(1)}/20）` : "";
-          progEl.textContent = `评测原版 ${done}/${total}…${sc}`;
-          if (r) appendSample("原版", done, total, goals[done - 1] || "", r);
+          progEl.textContent = `${phase} ${done}/${total}…${sc}`;
+          if (r) appendSample(phase, done, total, setGoals[done - 1] || "", r);
         },
-        (idx, total, _stage, label) => { setStage(`📝 评测原版 · 第 ${idx}/${total} 个样本 — ${label}…`); },
+        (idx, total, _stage, label) => { setStage(`📝 ${phase} · 第 ${idx}/${total} 个样本 — ${label}…`); },
         controller.signal);
-      const agg = await aggregate(orig);
-      let html = `<div class="card" style="padding:12px;"><b>原版：均分 ${agg.avgTotal.toFixed(1)}/20</b>（${agg.count} 有效）<div class="muted" style="font-size:.78rem;margin-top:5px;">⚖️ 裁判：${esc(judgeLabel)}</div><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div>${metricsHtml(agg)}</div>`;
+      return { results, agg: await aggregate(results) };
+    };
+    try {
+      setStage(`🚀 已启动评测（调参集 ${devGoals.length} 条${holdGoals.length ? ` / 留出集 ${holdGoals.length} 条` : ""}，每个样本需 3 次模型调用，请勿关闭弹窗）`);
+      const origDev = await runSet(t, devGoals, "原版·调参集");
+      const origHold = holdGoals.length ? await runSet(t, holdGoals, "原版·留出集") : null;
+      const agg = origDev.agg;
+      const baseline = (origHold ?? origDev).agg;
+      let html = `<div class="card" style="padding:12px;"><b>原版：调参集 ${agg.avgTotal.toFixed(1)}/20${origHold ? ` · 留出集 ${origHold.agg.avgTotal.toFixed(1)}/20` : ""}</b>（${agg.count} 有效）<div class="muted" style="font-size:.78rem;margin-top:5px;">⚖️ 裁判：${esc(judgeLabel)}</div><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(agg.dims)}</div>${metricsHtml(agg)}</div>`;
       if (agg.avgTotal >= threshold) {
-        resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">✓ 已达到阈值（${threshold}），质量达标，建议保留原版。如需进一步打磨可手动微调。</p>`;
+        resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">✓ 调参集已达到阈值（${threshold}），质量达标，建议保留原版。如需进一步打磨可手动微调。</p>`;
         resEl.style.display = "";
         progEl.textContent = "完成";
         setStage("✅ 原版已达标，无需改写");
@@ -341,7 +353,7 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
         return;
       }
       const critique = buildCritique(agg);
-      appendNote("🧾 评测结论（改写依据）", critique.length > 420 ? critique.slice(0, 420) + "…" : critique, true);
+      appendNote("🧾 评测结论（改写依据，仅来自调参集）", critique.length > 420 ? critique.slice(0, 420) + "…" : critique, true);
       setStage("🧠 均分未达标，正在让 AI 改写提示词（单次调用，约 10–40 秒）…");
       progEl.textContent = `改写优化版…`;
       let liveCard: HTMLElement | null = null;
@@ -362,21 +374,19 @@ export function openOptimizeModal(t: any, onApply?: (rec: any) => void): void {
         }
       }, controller.signal);
       newPrompt = opt.prompt;
-      setStage("📝 复测优化版阶段…");
-      progEl.textContent = `复测优化版 0/${goals.length}…`;
       const optT = { ...t, prompt: newPrompt };
-      const optRes = await judgeSamples(optT, goals, {}, judgeOver,
-        (done, total, r) => {
-          const sc = (r && typeof r.total === "number") ? `（本样本 ${(r.total as number).toFixed(1)}/20）` : "";
-          progEl.textContent = `复测优化版 ${done}/${total}…${sc}`;
-          if (r) appendSample("优化版", done, total, goals[done - 1] || "", r);
-        },
-        (idx, total, _stage, label) => { setStage(`📝 复测优化版 · 第 ${idx}/${total} 个样本 — ${label}…`); },
-        controller.signal);
-      const optAgg = await aggregate(optRes);
-      const delta = optAgg.avgTotal - agg.avgTotal;
-      html += `<div class="card mt-2" style="padding:12px;border-color:var(--brand);"><b>优化版：均分 ${optAgg.avgTotal.toFixed(1)}/20</b> <span class="pill pill-amber">${delta >= 0 ? "▲ +" : "▼ "}${delta.toFixed(1)}</span><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(optAgg.dims)}</div>${metricsHtml(optAgg)}</div>`;
-      resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">${delta > 0 ? "优化后质量提升，可「采用优化版」。仍可在「历史版本」回滚。" : "优化后分数未提升，建议保留原版或手动调整阈值。"}</p>`;
+      const optDev = await runSet(optT, devGoals, "优化版·调参集");
+      const optHold = holdGoals.length ? await runSet(optT, holdGoals, "优化版·留出集") : null;
+      const after = (optHold ?? optDev).agg;
+      const delta = after.avgTotal - baseline.avgTotal;
+      const devDelta = optDev.agg.avgTotal - agg.avgTotal;
+      const scope = optHold ? "留出集" : "调参集";
+      html += `<div class="card mt-2" style="padding:12px;border-color:var(--brand);"><b>优化版：调参集 ${optDev.agg.avgTotal.toFixed(1)}/20${optHold ? ` · 留出集 ${optHold.agg.avgTotal.toFixed(1)}/20` : ""}</b> <span class="pill pill-amber">${delta >= 0 ? "▲ +" : "▼ "}${delta.toFixed(1)}（${scope}）</span><div class="muted" style="font-size:.8rem;margin-top:4px;">${dimHtml(optDev.agg.dims)}</div>${metricsHtml(optDev.agg)}</div>`;
+      const overfit = optHold && Math.sign(devDelta) !== Math.sign(delta) && Math.abs(delta) > 0;
+      const verdict = delta > 0
+        ? `优化后在${scope}提升 ${delta.toFixed(1)} 分，可「采用优化版」。仍可在「历史版本」回滚。`
+        : `优化后在${scope}未提升（${delta.toFixed(1)}），建议保留原版或手动调整阈值。`;
+      resEl.innerHTML = html + `<p class="muted mt-2" style="font-size:.82rem;">${overfit ? "⚠️ 调参集与留出集方向不一致，疑似过拟合，建议谨慎采用。" : verdict}</p>`;
       resEl.style.display = "";
       diffEl.innerHTML = `<div class="muted" style="font-size:.8rem;margin-bottom:6px;">原版 ↔ 优化版 文本差异</div><div class="code-box" style="white-space:pre-wrap;max-height:300px;overflow:auto;">${diffLines(t.prompt, newPrompt)}</div>`;
       diffEl.style.display = "";
