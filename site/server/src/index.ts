@@ -27,6 +27,13 @@ if (STATIC_ROOT === PROJECT_ROOT) {
   log.warn("未检测到 dist/ 构建产物，将直接服务源码根（前端 TS 模块不会被转译，请用 `npm run build` 后再启动，或用 `npm run dev` 起 Vite 开发服务器）。");
 }
 const PORT = Number(process.env.PORT ?? 8000);
+// 默认只监听回环地址：这是一个「本地个人工具」，默认不应把 /relay、/agent 暴露到局域网/公网。
+// 容器部署时在 Dockerfile 里显式设 HOST=0.0.0.0。
+const HOST = process.env.HOST ?? "127.0.0.1";
+// 请求体上限（默认 2MB）：防止超大 body 直接吃内存。模板/对话请求远小于此。
+const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES ?? 2 * 1024 * 1024);
+// 可选：给 /relay 加共享密钥。设置后前端需带 x-relay-token；不设则保持本地工具的开箱即用。
+const RELAY_TOKEN = process.env.RELAY_TOKEN;
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -78,18 +85,45 @@ function sendJSON(res: http.ServerResponse, code: number, obj: unknown) {
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-    req.on("error", reject);
+    let size = 0;
+    let settled = false;
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    req.on("data", (c: Buffer) => {
+      if (settled) return;
+      size += c.length;
+      if (size > MAX_BODY_BYTES) {
+        const err = Object.assign(new Error(`请求体超过上限（${MAX_BODY_BYTES} bytes）`), { code: "BODY_TOO_LARGE" });
+        fail(err);
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (settled) return;
+      settled = true;
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    req.on("error", (err) => fail(err));
   });
 }
 
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
-  let urlPath = decodeURIComponent((req.url ?? "/").split("?")[0]);
+  let urlPath: string;
+  try {
+    urlPath = decodeURIComponent((req.url ?? "/").split("?")[0]);
+  } catch {
+    res.writeHead(400); res.end("bad request"); return;
+  }
   if (urlPath === "/") urlPath = "/index.html";
-  // 防遍历
+  // 防遍历：用 path.relative 判断是否仍在静态根内（比 startsWith 更严格，避免 dist-evil 这类同前缀兄弟目录）
   const filePath = path.normalize(path.join(STATIC_ROOT, urlPath));
-  if (!filePath.startsWith(STATIC_ROOT)) { res.writeHead(403); res.end("forbidden"); return; }
+  const rel = path.relative(STATIC_ROOT, filePath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) { res.writeHead(403); res.end("forbidden"); return; }
   try {
     const st = await stat(filePath);
     if (st.isDirectory()) { res.writeHead(403); res.end("forbidden"); return; }
@@ -111,6 +145,10 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) 
 // /relay：把 {url, method, headers, body} 转发，支持 SSE 流式回传。
 // 个人本地工具：relay 作为本机代理转发（如用户开启了代理时，服务端模型调用经此转发），仅转发已知模型厂商 origin（与 CSP 同源）。
 async function handleRelay(req: http.IncomingMessage, res: http.ServerResponse) {
+  // 可选共享密钥：设置 RELAY_TOKEN 后，/relay 不再对同机任意进程开放。
+  if (RELAY_TOKEN && req.headers["x-relay-token"] !== RELAY_TOKEN) {
+    return sendJSON(res, 401, { error: "relay 需要有效的 x-relay-token", code: "RELAY_UNAUTHORIZED" });
+  }
   const raw = await readBody(req);
   let payload: any;
   try { payload = JSON.parse(raw || "{}"); } catch { return sendJSON(res, 400, { error: "无效 JSON" }); }
@@ -374,25 +412,34 @@ async function handleAgentStats(req: http.IncomingMessage, res: http.ServerRespo
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = req.url ?? "/";
-  if (req.method === "OPTIONS") {
-    res.writeHead(204, { "access-control-allow-origin": corsOrigin(req), "vary": "origin", "access-control-allow-methods": "POST,GET,OPTIONS", "access-control-allow-headers": "*" });
-    res.end();
-    return;
-  }
-  // 健康检查（监控探活）
-  if (url.startsWith("/healthz") && req.method === "GET") return handleHealthz(req, res);
+  try {
+    const url = req.url ?? "/";
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, { "access-control-allow-origin": corsOrigin(req), "vary": "origin", "access-control-allow-methods": "POST,GET,OPTIONS", "access-control-allow-headers": "*" });
+      res.end();
+      return;
+    }
+    // 健康检查（监控探活）
+    if (url.startsWith("/healthz") && req.method === "GET") return await handleHealthz(req, res);
 
-  if (url.startsWith("/relay") && (req.method === "POST" || req.method === "GET")) return handleRelay(req, res);
-  // 前端直连链路用量批量上报（无状态、fire-and-forget）；须排在 /agent/* 之前或之后均可（前缀不冲突）。
-  if (url.startsWith("/agent/trace") && req.method === "POST") return handleAgentTrace(req, res);
-  // 本地用量看板取数（GET，只读；恒 200）
-  if (url.startsWith("/agent/stats") && req.method === "GET") return handleAgentStats(req, res);
-  if (url.startsWith("/agent/generate") && req.method === "POST") return handleAgentGenerate(req, res);
-  if (url.startsWith("/agent/use") && req.method === "POST") return handleAgentUse(req, res);
-  if (url.startsWith("/agent/clarify") && req.method === "POST") return handleAgentClarify(req, res);
-  if (url.startsWith("/agent/refine") && req.method === "POST") return handleAgentRefine(req, res);
-  return serveStatic(req, res);
+    if (url.startsWith("/relay") && (req.method === "POST" || req.method === "GET")) return await handleRelay(req, res);
+    // 前端直连链路用量批量上报（无状态、fire-and-forget）；须排在 /agent/* 之前或之后均可（前缀不冲突）。
+    if (url.startsWith("/agent/trace") && req.method === "POST") return await handleAgentTrace(req, res);
+    // 本地用量看板取数（GET，只读；恒 200）
+    if (url.startsWith("/agent/stats") && req.method === "GET") return await handleAgentStats(req, res);
+    if (url.startsWith("/agent/generate") && req.method === "POST") return await handleAgentGenerate(req, res);
+    if (url.startsWith("/agent/use") && req.method === "POST") return await handleAgentUse(req, res);
+    if (url.startsWith("/agent/clarify") && req.method === "POST") return await handleAgentClarify(req, res);
+    if (url.startsWith("/agent/refine") && req.method === "POST") return await handleAgentRefine(req, res);
+    return await serveStatic(req, res);
+  } catch (e) {
+    // 统一错误出口：body 超限 → 413；其余 → 500（不把内部堆栈回给客户端）。
+    const err = e as any;
+    if (res.headersSent) { try { res.end(); } catch { /* ignore */ } return; }
+    if (err?.code === "BODY_TOO_LARGE") return sendJSON(res, 413, { error: err.message, code: "BODY_TOO_LARGE" });
+    log.error("请求处理异常", { message: err?.message, stack: err?.stack });
+    return sendJSON(res, 500, { error: "internal error" });
+  }
 });
 
 // ---------- 进程治理：优雅退出 + 未捕获异常兜底 ----------
@@ -418,8 +465,11 @@ process.on("unhandledRejection", (reason) => {
   // 不退出：保持可用，仅记录
 });
 
-server.listen(PORT, () => {
-  log.info(`静态 + /relay + /agent 已启动: http://localhost:${PORT}`);
+server.listen(PORT, HOST, () => {
+  log.info(`静态 + /relay + /agent 已启动: http://${HOST}:${PORT}`);
+  if (HOST !== "127.0.0.1" && HOST !== "localhost") {
+    log.warn(`服务监听在 ${HOST}：/relay 无鉴权时请勿直接暴露公网；建议设置 RELAY_TOKEN 或改为 127.0.0.1。`);
+  }
   log.info(`静态根: ${STATIC_ROOT}`);
   // 启动后预热 RAG 索引（不阻塞请求处理；失败也无妨，首次检索会惰性重建）
   warmupRag().catch((e) => log.warn("RAG 预热异常", { message: (e as Error)?.message }));
