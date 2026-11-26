@@ -25,12 +25,26 @@ jobs:
       - name: Install dependencies
         run: |
           # 服务端依赖含 onnxruntime/sharp/tree-sitter 等安装脚本，偶发网络/缓存问题。
-          # 失败一次后清缓存重试，并把生命周期脚本输出打出来便于定位。
-          npm ci --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000 || {
+          # 失败一次后清缓存重试；最终失败时把日志写进 Job Summary（无需登录即可查看）。
+          set -o pipefail
+          log=/tmp/npm-ci.log
+          try_install() {
+            npm ci --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000 2>&1 | tee "$log"
+            return ${PIPESTATUS[0]}
+          }
+          if ! try_install; then
             echo "::warning::npm ci failed once; clearing npm cache and retrying"
             npm cache clean --force
-            npm ci --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000
-          }
+            if ! try_install; then
+              {
+                echo "### npm ci failed (server)"
+                echo '```'
+                tail -n 200 "$log"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
 
       - name: Type check (tsc --noEmit)
         run: npm run typecheck
@@ -74,11 +88,26 @@ jobs:
       - name: Build image (docker compose)
         run: |
           # 首次构建失败时清掉 buildx 缓存再重试一次，区分「缓存损坏」与真实构建错误。
-          docker compose -f site/docker-compose.yml build || {
+          # 最终失败时把尾部日志写进 Job Summary（无需登录即可查看）。
+          set -o pipefail
+          log=/tmp/docker-build.log
+          try_build() {
+            docker compose -f site/docker-compose.yml build 2>&1 | tee "$log"
+            return ${PIPESTATUS[0]}
+          }
+          if ! try_build; then
             echo "::warning::docker compose build failed once; pruning builder cache and retrying"
             docker builder prune -af
-            docker compose -f site/docker-compose.yml build
-          }
+            if ! try_build; then
+              {
+                echo "### docker compose build failed"
+                echo '```'
+                tail -n 200 "$log"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
 
       - name: Smoke test (up → /healthz → down)
         run: |
