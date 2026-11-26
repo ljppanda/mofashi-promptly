@@ -10,7 +10,8 @@ WORKDIR /app
 ARG VITE_TURNSTILE_SITE_KEY=""
 
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000 \
+    || (npm cache clean --force && npm ci --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000)
 
 COPY vite.config.ts tsconfig.json index.html ./
 COPY src ./src
@@ -30,8 +31,12 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0
 
 # 后端依赖：tsx 在 dependencies 中，--omit=dev 仍可用。
+# onnxruntime/sharp/tree-sitter 等安装脚本在 CI 偶发网络失败，失败一次后清缓存重试。
 COPY server/package.json server/package-lock.json ./server/
-RUN cd /app/server && npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN cd /app/server \
+    && (npm ci --omit=dev --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000 \
+        || (npm cache clean --force && npm ci --omit=dev --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000)) \
+    && npm cache clean --force
 
 # 后端源码 + 种子语料 + 运维脚本
 COPY server/tsconfig.json ./server/

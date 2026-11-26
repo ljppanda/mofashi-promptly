@@ -8,6 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: site/server
@@ -22,7 +23,14 @@ jobs:
           cache-dependency-path: site/server/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # 服务端依赖含 onnxruntime/sharp/tree-sitter 等安装脚本，偶发网络/缓存问题。
+          # 失败一次后清缓存重试，并把生命周期脚本输出打出来便于定位。
+          npm ci --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000 || {
+            echo "::warning::npm ci failed once; clearing npm cache and retrying"
+            npm cache clean --force
+            npm ci --no-audit --no-fund --foreground-scripts --fetch-retries=5 --fetch-retry-maxtimeout=120000
+          }
 
       - name: Type check (tsc --noEmit)
         run: npm run typecheck
@@ -59,11 +67,18 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Build image (docker compose)
-        run: docker compose -f site/docker-compose.yml build
+        run: |
+          # 首次构建失败时清掉 buildx 缓存再重试一次，区分「缓存损坏」与真实构建错误。
+          docker compose -f site/docker-compose.yml build || {
+            echo "::warning::docker compose build failed once; pruning builder cache and retrying"
+            docker builder prune -af
+            docker compose -f site/docker-compose.yml build
+          }
 
       - name: Smoke test (up → /healthz → down)
         run: |
