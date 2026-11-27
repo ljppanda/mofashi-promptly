@@ -28,7 +28,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production \
     PORT=8000 \
-    HOST=0.0.0.0
+    HOST=0.0.0.0 \
+    ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 
 # 后端依赖：tsx 在 dependencies 中，--omit=dev 仍可用。
 # onnxruntime/sharp/tree-sitter 等安装脚本在 CI 偶发网络失败，失败一次后清缓存重试。

@@ -9,6 +9,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # 项目只用 CPU 推理；onnxruntime-node 在 Linux x64 默认会下载 CUDA 12 GPU 包，
+      # 该包 URL 可能 404。显式跳过，避免 npm ci 失败。
+      ONNXRUNTIME_NODE_INSTALL_CUDA: skip
     defaults:
       run:
         working-directory: site/server

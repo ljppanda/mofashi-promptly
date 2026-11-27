@@ -67,6 +67,9 @@ LangSmith 上报原本 `await` 在生成请求的关键路径上，且 `fetch` �
   `path.relative` 做包含校验；`decodeURIComponent` 异常返回 400 而非未捕获 rejection。
 - 请求体超限走 `drain` 而不是 `destroy`：后者会连响应一起掐断，客户端只看到连接重置，
   拿不到 413。该逻辑抽到 `http-body.ts` 并有 4 条离线单测。
+- CI/容器在 Linux x64 安装 `onnxruntime-node` 时会默认下载 CUDA 12 GPU 包，而该包
+  URL 返回 404，导致 `npm ci` 失败。项目只用 CPU 推理，`.npmrc` 设置
+  `onnxruntime-node-install-cuda=skip` 显式跳过。
 
 ## 7. 仍然存在的限制（诚实清单）
 
