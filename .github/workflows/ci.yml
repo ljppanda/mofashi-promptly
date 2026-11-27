@@ -42,6 +42,9 @@ jobs:
                 tail -n 200 "$log"
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
+              # 同时写进 annotation：公开仓库未登录也能通过 API 看到错误尾部。
+              msg=$(tail -n 40 "$log" | sed 's/%/%25/g' | tr '\n' ' ' | cut -c1-4000)
+              echo "::error title=npm ci failed::$msg"
               exit 1
             fi
           fi
@@ -105,6 +108,8 @@ jobs:
                 tail -n 200 "$log"
                 echo '```'
               } >> "$GITHUB_STEP_SUMMARY"
+              msg=$(tail -n 40 "$log" | sed 's/%/%25/g' | tr '\n' ' ' | cut -c1-4000)
+              echo "::error title=docker build failed::$msg"
               exit 1
             fi
           fi
